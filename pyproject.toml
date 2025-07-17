@@ -1,0 +1,25 @@
+[project]
+name = "health-agents"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "asyncio>=3.4.3",
+    "asyncpg>=0.30.0",
+    "chainlit>=2.6.0",
+    "fpdf>=1.7.2",
+    "nest-asyncio>=1.6.0",
+    "openai>=1.95.1",
+    "openai-agents>=0.1.0",
+    "pandas>=2.3.1",
+    "plotly-express>=0.4.1",
+    "psycopg2>=2.9.10",
+    "psycopg2-binary>=2.9.10",
+    "pydantic>=2.11.7",
+    "python-dotenv>=1.1.1",
+    "rich>=14.0.0",
+    "sqlalchemy>=2.0.41",
+    "streamlit>=1.46.1",
+    "weasyprint>=65.1",
+]

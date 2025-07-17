@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Wellness Report</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 30px;
+            background-color: #fdfdfd;
+            color: #333;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .section {
+            margin-bottom: 25px;
+        }
+        .section h2 {
+            border-bottom: 2px solid #2e86c1;
+            padding-bottom: 5px;
+            color: #2e86c1;
+        }
+        .bmi {
+            font-weight: bold;
+            color: #d35400;
+        }
+        ul {
+            padding-left: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Wellness Report for {{ user.name | default("Unknown User") }}</h1>
+        <p>Generated on {{ generated_at | default("N/A") }}</p>
+    </div>
+
+    <div class="section">
+        <h2>Personal Information</h2>
+        <p><strong>UID:</strong> {{ user.uid | default("N/A") }}</p>
+        <p><strong>Goal:</strong> {{ user.goal | default("Not specified") }}</p>
+        <p><strong>Diet Preferences:</strong> {{ user.diet_preferences | default("None") }}</p>
+        {% if bmi %}
+            <p><strong>BMI:</strong> <span class="bmi">{{ bmi }}</span></p>
+        {% endif %}
+    </div>
+
+    {% if user.meal_plan %}
+    <div class="section">
+        <h2>Meal Plan</h2>
+        <ul>
+            {% for meal in user.meal_plan %}
+                <li>{{ meal }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+</body>
+</html>
