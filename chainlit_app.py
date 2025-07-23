@@ -1,163 +1,250 @@
+"""
+Chainlit Health & Wellness Coach
+Multi-agent health assistance with chat interface
+"""
+
 import os
 import chainlit as cl
 from openai import AsyncOpenAI
 from typing import AsyncGenerator
-from datetime import datetime
 
-from context import UserSessionContext, GoalType, GoalUnit, DietaryPreference, MedicalCondition
-from utils.report import generate_pdf_report
-from app_config import config
-from utils.transform import transform_input
+from agents.wellness_agent import WellnessAgent
+from agents.nutrition_expert_agent import NutritionAgent
+from agents.fitness_agent import FitnessAgent
+from context import UserSessionContext
+from database import init_db, save_conversation
 
-client = AsyncOpenAI(api_key=config.openai_api_key)
+# Initialize OpenAI client
+client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-class WellnessAssistant:
-    def __init__(self):
-        self.system_prompt = (
-            "You are a certified nutritionist and wellness coach. "
-            "Provide scientifically-validated, personalized advice with clear explanations "
-            "in simple terms. Offer culturally appropriate suggestions."
-        )
-        self.safety_instructions = (
-            "If a request violates content policies, respond with: "
-            "\"🔒 I can't assist with that request, but I'm happy to help "
-            "with nutrition and wellness advice.\""
-        )
+# Initialize agents
+wellness_agent = WellnessAgent()
+nutrition_agent = NutritionAgent()
+fitness_agent = FitnessAgent()
 
-    async def generate_response(self, prompt: str, context: UserSessionContext) -> AsyncGenerator[str, None]:
-        full_prompt = self._build_prompt(prompt, context)
+# Agent mapping for easy selection
+AGENTS = {
+    "wellness": ("🌟 Wellness Coach", wellness_agent),
+    "nutrition": ("🥗 Nutrition Coach", nutrition_agent),
+    "fitness": ("💪 Fitness Coach", fitness_agent),
+}
 
-        try:
-            stream = await client.chat.completions.create(
-                model=config.model_name,
-                messages=[
-                    {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": full_prompt}
-                ],
-                stream=True,
-                temperature=0.7
-            )
-
-            async for chunk in stream:
-                if chunk.choices[0].delta.content:
-                    yield chunk.choices[0].delta.content
-
-        except Exception as e:
-            yield self._handle_error(e)
-
-    def _build_prompt(self, prompt: str, context: UserSessionContext) -> str:
-        return f"""
-        [User Profile]
-        User ID: {context.user_id}
-        Goal: {context.goal_type} - {context.goal_target}{context.goal_unit} by {context.goal_deadline}
-        Dietary Preferences: {context.dietary_preference}
-        Allergies: {', '.join(context.food_allergies)}
-        Medical Conditions: {', '.join([mc.value for mc in context.medical_conditions])}
-        Last Updated: {datetime.now().strftime('%Y-%m-%d %H:%M')}
-
-        [Instructions]
-        {self.safety_instructions}
-
-        [Current Request]
-        {prompt}
-        """
-
-    def _handle_error(self, error: Exception) -> str:
-        if "content policy" in str(error).lower():
-            return "🔒 I can't assist with that request due to content policies."
-        return "⚠️ Technical difficulty: Please try again later."
-
-
-assistant = WellnessAssistant()
 
 @cl.on_chat_start
-async def init_session():
-    raw_data = {
-        "name": "Asma Yaseen",
-        "uid": "00436743",
-        "goal": "Lose 5kg in 2 months",
-        "diet_preferences": "Vegetarian",
-        "lifestyle": "Busy office worker",
-        "handoff_logs": [],
-        "progress_logs": []
-    }
-
-    context = UserSessionContext(**transform_input(raw_data))
+async def start():
+    """Initialize the chat session."""
+    # Initialize database
+    init_db()
+    
+    # Create user context
+    user_id = f"chainlit_user_{cl.user_session.get('id', 'anonymous')}"
+    context = UserSessionContext(user_id=user_id)
+    
+    # Store in session
     cl.user_session.set("context", context)
+    cl.user_session.set("current_agent", "wellness")
+    
+    # Welcome message with agent selection
+    actions = [
+        cl.Action(
+            name="select_wellness",
+            value="wellness",
+            label="🌟 Wellness Coach",
+            description="General health guidance and wellness advice"
+        ),
+        cl.Action(
+            name="select_nutrition", 
+            value="nutrition",
+            label="🥗 Nutrition Coach",
+            description="Diet planning and nutritional guidance"
+        ),
+        cl.Action(
+            name="select_fitness",
+            value="fitness", 
+            label="💪 Fitness Coach",
+            description="Workout plans and exercise recommendations"
+        ),
+    ]
+    
+    await cl.Message(
+        content="""# 🏥 Welcome to Health & Wellness Coach!
 
-    welcome = cl.Message(content="")
-    await welcome.send()
+I'm your AI-powered health assistant with specialized coaches to help you achieve your wellness goals.
 
-    await welcome.stream_token(
-        """🌿 **Welcome to Your Wellness Assistant!**
+## Available Coaches:
+- **🌟 Wellness Coach**: General health guidance, lifestyle advice, and motivation
+- **🥗 Nutrition Coach**: Personalized meal planning, dietary recommendations, and nutrition education  
+- **💪 Fitness Coach**: Custom workout plans, exercise guidance, and fitness strategies
 
-I'm here to help you with:
-- Personalized meal planning 🍎
-- Nutrition guidance 📊
-- Healthy lifestyle tips 🏋️
-- Progress tracking 📈
+Please select a coach to start our conversation, or just type your health question and I'll route you to the right specialist!
 
-How can I assist you today?"""
-    )
+---
+*Remember: This AI coach provides general wellness information only. Always consult healthcare professionals for medical concerns.*
+""",
+        actions=actions
+    ).send()
+
+
+@cl.action_callback("select_wellness")
+async def on_wellness_selected(action):
+    """Handle wellness coach selection."""
+    cl.user_session.set("current_agent", "wellness")
+    await cl.Message(
+        content="🌟 **Wellness Coach activated!**\n\nI'm here to help with general health questions, lifestyle advice, motivation, and overall wellness guidance. What would you like to discuss today?"
+    ).send()
+
+
+@cl.action_callback("select_nutrition")
+async def on_nutrition_selected(action):
+    """Handle nutrition coach selection."""
+    cl.user_session.set("current_agent", "nutrition")
+    await cl.Message(
+        content="🥗 **Nutrition Coach activated!**\n\nI'm ready to help with meal planning, dietary advice, nutritional analysis, and healthy eating strategies. What nutrition goals are you working on?"
+    ).send()
+
+
+@cl.action_callback("select_fitness")
+async def on_fitness_selected(action):
+    """Handle fitness coach selection."""
+    cl.user_session.set("current_agent", "fitness")
+    await cl.Message(
+        content="💪 **Fitness Coach activated!**\n\nLet's work on your fitness goals! I can help create workout plans, suggest exercises, provide form guidance, and adapt routines for your needs. What's your fitness objective?"
+    ).send()
+
 
 @cl.on_message
-async def handle_message(message: cl.Message):
-    context: UserSessionContext = cl.user_session.get("context")
-    if not context:
-        await cl.Message(content="⚠️ Session error. Please refresh.").send()
-        return
-
+async def main(message: cl.Message):
+    """Process user messages and route to appropriate agent."""
+    context = cl.user_session.get("context")
+    current_agent_key = cl.user_session.get("current_agent", "wellness")
+    
+    # Get the selected agent
+    agent_name, agent = AGENTS[current_agent_key]
+    
+    # Update context with message history
+    if context:
+        # Store conversation in context
+        if not hasattr(context, 'conversation_history'):
+            context.conversation_history = []
+        context.conversation_history.append({
+            "role": "user",
+            "content": message.content,
+            "timestamp": cl.context.session.created_at
+        })
+    
+    # Create message placeholder
     msg = cl.Message(content="")
     await msg.send()
-
-    full_response = ""
-    is_meal_plan = any(kw in message.content.lower() for kw in ["meal plan", "diet plan", "eating plan"])
-
+    
     try:
-        async for chunk in assistant.generate_response(message.content, context):
-            full_response += chunk
-            await msg.stream_token(chunk)
-
-        if hasattr(context, "add_progress_update"):
-            context.add_progress_update(
-                event_type="goal_update" if is_meal_plan else "note",
-                description=message.content[:100]
+        # Stream response from agent
+        response_text = ""
+        async for chunk in agent.process_message(message.content, context):
+            if chunk:
+                response_text += chunk
+                await msg.stream_token(chunk)
+        
+        await msg.update()
+        
+        # Save to database
+        if context and context.user_id:
+            save_conversation(
+                context.user_id,
+                message.content,
+                response_text,
+                current_agent_key
             )
-
-        if is_meal_plan:
-            await _handle_meal_plan(context, full_response)
-
-    except Exception as e:
-        await msg.stream_token(f"❌ Error: {str(e)}")
-        if hasattr(context, "add_progress_update"):
-            context.add_progress_update(
-                event_type="system",
-                description=f"Error during processing: {str(e)}"
-            )
-
-async def _handle_meal_plan(context: UserSessionContext, full_response: str):
-    try:
-        if hasattr(context, "log_handoff"):
-            context.log_handoff(
-                from_agent="WellnessAssistant",
-                to_agent="MealPlanModule",
-                reason="Generated meal plan based on user request",
-                context_snapshot={"response": full_response}
-            )
-
-        report_path = generate_pdf_report(context)
-
-        if os.path.exists(report_path):
-            await cl.Message(
-                content="📄 Here's your personalized meal plan:",
-                elements=[
-                    cl.File(
-                        name=f"meal_plan_{datetime.now().date()}.pdf",
-                        path=report_path,
-                        display="inline",
-                        description="Your personalized meal plan"
+            
+        # Update context with response
+        if context and hasattr(context, 'conversation_history'):
+            context.conversation_history.append({
+                "role": "assistant",
+                "content": response_text,
+                "agent": current_agent_key,
+                "timestamp": cl.context.session.created_at
+            })
+            
+        # Add agent switching actions if the response suggests it
+        if should_suggest_agent_switch(response_text):
+            actions = []
+            
+            # Suggest other agents based on response content
+            if "nutrition" in response_text.lower() or "diet" in response_text.lower():
+                actions.append(
+                    cl.Action(
+                        name="switch_nutrition",
+                        value="nutrition", 
+                        label="🥗 Switch to Nutrition Coach",
+                        description="Get specialized dietary guidance"
                     )
-                ]
-            ).send()
+                )
+            
+            if "exercise" in response_text.lower() or "workout" in response_text.lower():
+                actions.append(
+                    cl.Action(
+                        name="switch_fitness",
+                        value="fitness",
+                        label="💪 Switch to Fitness Coach", 
+                        description="Get personalized workout plans"
+                    )
+                )
+                
+            if actions:
+                await cl.Message(
+                    content="💡 Would you like specialized help with this topic?",
+                    actions=actions
+                ).send()
+                
     except Exception as e:
-        await cl.Message(content=f"⚠️ Couldn't generate PDF: {str(e)}").send()
+        await cl.Message(
+            content=f"❌ I encountered an error: {str(e)}\n\nPlease try your question again or contact support if the issue persists."
+        ).send()
+
+
+@cl.action_callback("switch_nutrition")
+async def switch_to_nutrition(action):
+    """Switch to nutrition coach."""
+    cl.user_session.set("current_agent", "nutrition")
+    await cl.Message(
+        content="🥗 **Switched to Nutrition Coach!**\n\nI'm now ready to provide specialized dietary and nutrition guidance. How can I help with your nutritional goals?"
+    ).send()
+
+
+@cl.action_callback("switch_fitness")
+async def switch_to_fitness(action):
+    """Switch to fitness coach."""
+    cl.user_session.set("current_agent", "fitness")
+    await cl.Message(
+        content="💪 **Switched to Fitness Coach!**\n\nReady to help with your fitness journey! What workout or exercise questions do you have?"
+    ).send()
+
+
+def should_suggest_agent_switch(response_text: str) -> bool:
+    """Determine if we should suggest switching to a different agent."""
+    # Simple keyword detection for agent switching suggestions
+    nutrition_keywords = ["meal", "diet", "calories", "nutrition", "food", "eating"]
+    fitness_keywords = ["exercise", "workout", "fitness", "training", "gym", "strength"]
+    
+    text_lower = response_text.lower()
+    
+    # Check if response contains keywords for other agents
+    has_nutrition = any(keyword in text_lower for keyword in nutrition_keywords)
+    has_fitness = any(keyword in text_lower for keyword in fitness_keywords)
+    
+    return has_nutrition or has_fitness
+
+
+@cl.on_stop
+async def on_stop():
+    """Handle session cleanup."""
+    context = cl.user_session.get("context")
+    if context:
+        # Could add session summary or final recommendations here
+        print(f"Session ended for user: {context.user_id}")
+
+
+if __name__ == "__main__":
+    # This is for development - Chainlit runs automatically
+    print("Chainlit Health & Wellness Coach")
+    print("Run with: chainlit run chainlit_app.py")
+    

@@ -1,15 +1,14 @@
 # Standard Library Imports
 from datetime import datetime
 from typing import Dict, List, Optional, Literal
+from typing import Dict, List, Optional, Literal, Any
 import logging
 
 # Third-party Imports
 from pydantic import BaseModel, Field, field_validator
-from openai_agents import tool
 
 # Local Imports
-from ..context import UserSessionContext
-from ..guardrails import WorkoutPlanOutput, InjuryInput
+from context import UserSessionContext
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -79,6 +78,75 @@ class WorkoutDatabase:
                 )
             ],
             duration="25 mins"
+        ),
+        "Wednesday": WorkoutDay(
+            focus="Recovery",
+            exercises=[
+                Exercise(
+                    name="Gentle Yoga",
+                    description="Light stretching and relaxation poses.",
+                    equipment=["Yoga mat"],
+                    target_muscles=["Full body"]
+                )
+            ],
+            duration="20 mins",
+            intensity="light"
+        ),
+        "Thursday": WorkoutDay(
+            focus="Cardio",
+            exercises=[
+                Exercise(
+                    name="Light Cycling",
+                    description="Easy-paced cycling for 25 minutes.",
+                    equipment=["Bicycle or stationary bike"],
+                    target_muscles=["Legs", "Core"]
+                )
+            ],
+            duration="25 mins"
+        ),
+        "Friday": WorkoutDay(
+            focus="Strength",
+            exercises=[
+                Exercise(
+                    name="Planks",
+                    description="Hold plank position for 30 seconds, repeat 3 times.",
+                    modifications=["Knee planks", "Wall planks"],
+                    target_muscles=["Core", "Shoulders"]
+                ),
+                Exercise(
+                    name="Lunges",
+                    description="Perform 3 sets of 8 reps each leg.",
+                    modifications=["Stationary lunges", "Chair-assisted lunges"],
+                    target_muscles=["Quads", "Glutes", "Hamstrings"]
+                )
+            ],
+            duration="20 mins"
+        ),
+        "Saturday": WorkoutDay(
+            focus="Flexibility",
+            exercises=[
+                Exercise(
+                    name="Full Body Stretching",
+                    description="Comprehensive stretching routine for all major muscle groups.",
+                    equipment=["Yoga mat"],
+                    target_muscles=["Full body"]
+                )
+            ],
+            duration="30 mins",
+            intensity="light"
+        ),
+        "Sunday": WorkoutDay(
+            focus="Recovery",
+            exercises=[
+                Exercise(
+                    name="Leisurely Walk",
+                    description="Gentle walk in nature or around the neighborhood.",
+                    equipment=["Comfortable shoes"],
+                    target_muscles=["Legs"]
+                )
+            ],
+            duration="20 mins",
+            intensity="light"
         )
     }
 
@@ -94,6 +162,60 @@ class WorkoutDatabase:
                 )
             ],
             duration="30 mins",
+            intensity="high"
+        ),
+        "Tuesday": WorkoutDay(
+            focus="Strength",
+            exercises=[
+                Exercise(
+                    name="Weighted Squats",
+                    description="4 sets of 12 reps with dumbbells.",
+                    equipment=["Dumbbells"],
+                    target_muscles=["Quads", "Glutes"]
+                ),
+                Exercise(
+                    name="Push-up Variations",
+                    description="3 sets of 15 standard push-ups.",
+                    modifications=["Diamond push-ups", "Wide-grip push-ups"],
+                    target_muscles=["Chest", "Triceps", "Shoulders"]
+                )
+            ],
+            duration="40 mins"
+        ),
+        "Wednesday": WorkoutDay(
+            focus="Cardio",
+            exercises=[
+                Exercise(
+                    name="Circuit Training",
+                    description="High-intensity circuit with burpees, jumping jacks, and mountain climbers.",
+                    equipment=["None"],
+                    target_muscles=["Full body"]
+                )
+            ],
+            duration="35 mins",
+            intensity="high"
+        )
+    }
+
+    ADVANCED: Dict[str, WorkoutDay] = {
+        "Monday": WorkoutDay(
+            focus="Strength",
+            exercises=[
+                Exercise(
+                    name="Deadlifts",
+                    description="5 sets of 5 reps with progressive loading.",
+                    equipment=["Barbell", "Weight plates"],
+                    target_muscles=["Hamstrings", "Glutes", "Back"]
+                ),
+                Exercise(
+                    name="Pull-ups",
+                    description="4 sets to failure.",
+                    modifications=["Assisted pull-ups", "Negative pull-ups"],
+                    equipment=["Pull-up bar"],
+                    target_muscles=["Lats", "Biceps"]
+                )
+            ],
+            duration="60 mins",
             intensity="high"
         )
     }
@@ -112,7 +234,7 @@ class WorkoutDatabase:
         levels = {
             "beginner": cls.BEGINNER,
             "intermediate": cls.INTERMEDIATE,
-            "advanced": cls.INTERMEDIATE  # TODO: Add separate advanced workouts
+            "advanced": cls.ADVANCED
         }
         return levels.get(level.lower(), cls.BEGINNER)
 
@@ -128,81 +250,142 @@ class WorkoutDatabase:
         Returns:
             Modified dictionary with safe alternatives where needed.
         """
-        modified = workouts.copy()
-
-        if "knee" in injury.lower():
-            for day, plan in modified.items():
-                updated_exercises = []
-                for ex in plan.exercises:
+        modified = {}
+        
+        for day, plan in workouts.items():
+            updated_exercises = []
+            for ex in plan.exercises:
+                new_ex = Exercise(**ex.model_dump())  # Create a copy
+                
+                # Modify based on injury type
+                if "knee" in injury.lower():
                     if any(keyword in ex.name.lower() for keyword in ["squat", "lunge", "jump"]):
-                        new_ex = ex.copy()
-                        new_ex.modifications = [
+                        new_ex.modifications = new_ex.modifications or []
+                        new_ex.modifications.extend([
                             "Seated leg press",
                             "Straight leg raises",
                             "Swimming"
-                        ]
-                        updated_exercises.append(new_ex)
-                    else:
-                        updated_exercises.append(ex)
-                plan.exercises = updated_exercises
-                modified[day] = plan
+                        ])
+                        new_ex.description += " (Modified for knee injury - use alternatives)"
+                
+                elif "back" in injury.lower():
+                    if any(keyword in ex.name.lower() for keyword in ["deadlift", "row", "lift"]):
+                        new_ex.modifications = new_ex.modifications or []
+                        new_ex.modifications.extend([
+                            "Light stretching",
+                            "Swimming",
+                            "Walking"
+                        ])
+                        new_ex.description += " (Modified for back injury - focus on gentle movements)"
+                
+                elif "shoulder" in injury.lower():
+                    if any(keyword in ex.name.lower() for keyword in ["push", "pull", "press"]):
+                        new_ex.modifications = new_ex.modifications or []
+                        new_ex.modifications.extend([
+                            "Lower body exercises",
+                            "Core work",
+                            "Walking"
+                        ])
+                        new_ex.description += " (Modified for shoulder injury - avoid overhead movements)"
+                
+                updated_exercises.append(new_ex)
+            
+            # Create new workout day with modified exercises
+            modified[day] = WorkoutDay(
+                focus=plan.focus,
+                exercises=updated_exercises,
+                duration=plan.duration,
+                intensity=plan.intensity
+            )
 
         return modified
 
-@tool
-async def recommend_workout(
-    goal: str,
-    experience: Literal["beginner", "intermediate", "advanced"] = "beginner",
-    injury_notes: Optional[str] = None,
-    context: Optional[UserSessionContext] = None
-) -> WorkoutPlanOutput:
-    """
-    Generates a structured weekly workout plan based on user goals, experience, and injuries.
+class WorkoutRecommenderTool:
+    """Tool for generating personalized workout recommendations."""
 
-    Args:
-        goal: Fitness goal (e.g., 'weight loss', 'muscle gain').
-        experience: User fitness level - beginner, intermediate, or advanced.
-        injury_notes: Any known physical limitations.
-        context: Optional session context to persist data.
+    @classmethod
+    def name(cls) -> str:
+        return "workout_recommender"
 
-    Returns:
-        WorkoutPlanOutput: Structured workout plan with daily schedules and safety adjustments.
-    """
-    logger.info(f"Generating workout for goal='{goal}', level='{experience}'")
+    @classmethod
+    def description(cls) -> str:
+        return "Generates personalized workout plans based on fitness level, goals, and limitations"
 
-    try:
-        # Process injury notes through schema validation
-        if injury_notes:
-            validated_injury = InjuryInput(notes=injury_notes).notes
-            if context:
-                context.injury_notes = validated_injury
-                logger.debug(f"Stored injury: {validated_injury}")
-        else:
-            validated_injury = None
-
-        # Fetch base workouts based on experience
-        workouts = WorkoutDatabase.get_workouts(experience)
-
-        # Apply modifications if injury present
-        if validated_injury:
-            workouts = WorkoutDatabase.modify_for_injury(workouts, validated_injury)
-            logger.info("Workout modified for injury adjustments.")
-
-        # Update user session context
-        if context:
-            context.workout_plan = {day: plan.model_dump() for day, plan in workouts.items()}
-            context.update_progress(
-                f"Generated {experience} workout plan",
-                metric="workouts",
-                value=len(workouts)
-            )
-            logger.debug("Context updated with workout plan.")
-
-        # Prepare and return structured output
-        return WorkoutPlanOutput(
-            schedule={day: plan.model_dump() for day, plan in workouts.items()}
+    class InputModel(BaseModel):
+        goal: str = Field(..., description="Fitness goal (e.g., 'weight loss', 'muscle gain')")
+        experience: Literal["beginner", "intermediate", "advanced"] = Field(
+            default="beginner",
+            description="User fitness level"
+        )
+        injury_notes: Optional[str] = Field(
+            None,
+            description="Any known physical limitations"
         )
 
-    except Exception as e:
-        logger.error(f"Workout plan generation failed: {str(e)}")
-        raise ValueError(f"Workout plan generation failed: {str(e)}")
+    class OutputModel(BaseModel):
+        success: bool = Field(..., description="Whether plan generation was successful")
+        message: str = Field(..., description="Status message")
+        schedule: Optional[Dict[str, Any]] = Field(None, description="Weekly workout schedule")
+
+    async def execute(
+        self,
+        goal: str,
+        experience: Literal["beginner", "intermediate", "advanced"] = "beginner",
+        injury_notes: Optional[str] = None,
+        context: Optional[UserSessionContext] = None
+    ) -> Dict[str, Any]:
+        """
+        Generates a structured weekly workout plan based on user goals, experience, and injuries.
+
+        Args:
+            goal: Fitness goal (e.g., 'weight loss', 'muscle gain').
+            experience: User fitness level - beginner, intermediate, or advanced.
+            injury_notes: Any known physical limitations.
+            context: Optional session context to persist data.
+
+        Returns:
+            Dict with success status, message, and workout schedule.
+        """
+        logger.info(f"Generating workout for goal='{goal}', level='{experience}'")
+
+        try:
+            # Validate injury notes if provided
+            validated_injury = None
+            if injury_notes:
+                validated_injury = injury_notes.strip()
+                if context:
+                    context.injury_notes = validated_injury
+                    logger.debug(f"Stored injury: {validated_injury}")
+
+            # Fetch base workouts based on experience
+            workouts = WorkoutDatabase.get_workouts(experience)
+
+            # Apply modifications if injury present
+            if validated_injury:
+                workouts = WorkoutDatabase.modify_for_injury(workouts, validated_injury)
+                logger.info("Workout modified for injury adjustments.")
+
+            # Update user session context
+            if context:
+                context.workout_plan = {day: plan.model_dump() for day, plan in workouts.items()}
+                context.update_progress(
+                    f"Generated {experience} workout plan",
+                    metric="workouts",
+                    value=len(workouts)
+                )
+                logger.debug("Context updated with workout plan.")
+
+            # Prepare and return structured output
+            return {
+                "success": True,
+                "message": f"Generated {experience} level workout plan for {goal}",
+                "schedule": {day: plan.model_dump() for day, plan in workouts.items()}
+            }
+
+        except Exception as e:
+            logger.error(f"Workout plan generation failed: {str(e)}")
+            return {
+                "success": False,
+                "message": f"Workout plan generation failed: {str(e)}",
+                "schedule": None
+            }

@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock
 from agents import WellnessPlannerAgent  # Adjust this import based on your actual project structure
-from utils.old_context import UserSessionContext  # Corrected import path
+from utils import UserSessionContext  # Corrected import path
 
 @pytest.fixture
 def mock_agent():

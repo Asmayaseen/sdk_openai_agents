@@ -1,171 +1,179 @@
-# planner.py
-import os
 import asyncio
-import logging
-from typing import List, Optional, Dict, AsyncGenerator
-from openai import AsyncOpenAI
-from dotenv import load_dotenv
+from typing import List, Dict, Any, Optional
 from datetime import datetime
-from enum import Enum
+import re
 
-from context import UserSessionContext
-
-# Logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Agent Types
-class AgentType(str, Enum):
-    WELLNESS = "wellness"
-    NUTRITION = "nutrition"
-    INJURY = "injury"
-    ESCALATION = "escalation"
+from context import UserSessionContext, AgentType, GoalType
+from agents import (
+    WellnessAgent,
+    NutritionAgent,
+    FitnessAgent,
+    MentalHealthAgent,
+    HumanCoachAgent
+)
 
 class WellnessPlanner:
-    """Main application class for Health & Wellness Planner"""
-
     def __init__(self):
-        self.agent_prompts = {
-            AgentType.WELLNESS: "You are a friendly health assistant. Provide general wellness advice.",
-            AgentType.NUTRITION: "You are a certified nutritionist. Give specific dietary recommendations.",
-            AgentType.INJURY: "You are a physical therapist. Suggest recovery advice for injuries.",
-            AgentType.ESCALATION: "You handle escalations to human experts. Collect key user needs professionally."
+        self.agents = {
+            AgentType.WELLNESS: WellnessAgent(),
+            AgentType.NUTRITION: NutritionAgent(),
+            AgentType.FITNESS: FitnessAgent(),
+            AgentType.MENTAL_HEALTH: MentalHealthAgent(),
+            AgentType.HUMAN_COACH: HumanCoachAgent()
         }
-
-        self.config = {
-            "model": "gpt-3.5-turbo",
-            "temperature": 0.7,
-            "max_tokens": 300,
-            "streaming": True
-        }
-
-        # Load environment
-        if not os.getenv("MOCK_MODE", "false").lower() == "true":
-            load_dotenv()
-            api_key = os.getenv("OPENAI_API_KEY")
-            if not api_key:
-                raise ValueError("OPENAI_API_KEY not found in environment")
-            self.client = AsyncOpenAI(api_key=api_key)
-            logger.info("✅ OpenAI client initialized")
-        else:
-            self.client = None
-            logger.info("🚧 Running in MOCK mode")
-
-    async def get_agent_response(
-        self,
-        agent: AgentType,
-        message: str,
-        context: UserSessionContext,
-        streaming: bool = False
-    ) -> AsyncGenerator[str, None]:
-        """Stream or get full response from GPT agent"""
-        if self.client is None:
-            yield self._get_mock_response(agent, message)
-            return
-
-        messages = [
-            {"role": "system", "content": self.agent_prompts[agent]},
-            *[msg.model_dump() for msg in context.conversation_history],
-            {"role": "user", "content": message}
+        
+        # Emergency keywords for crisis detection
+        self.emergency_keywords = [
+            'suicide', 'kill myself', 'end my life', 'want to die',
+            'hurt myself', 'self harm', 'overdose', 'emergency',
+            'crisis', 'help me', 'desperate', 'can\'t go on'
         ]
+    
+    def is_emergency(self, message: str) -> bool:
+        """Check if message contains emergency keywords"""
+        message_lower = message.lower()
+        return any(keyword in message_lower for keyword in self.emergency_keywords)
+    
+    async def handle_emergency(self, message: str, context: UserSessionContext) -> str:
+        """Handle emergency situations"""
+        emergency_response = """
+🚨 EMERGENCY SUPPORT RESOURCES 🚨
 
-        try:
-            if streaming:
-                stream = await self.client.chat.completions.create(
-                    model=self.config["model"],
-                    messages=messages,
-                    temperature=self.config["temperature"],
-                    max_tokens=self.config["max_tokens"],
-                    stream=True
-                )
-                async for chunk in stream:
-                    if chunk.choices[0].delta.content:
-                        yield chunk.choices[0].delta.content
-            else:
-                response = await self.client.chat.completions.create(
-                    model=self.config["model"],
-                    messages=messages,
-                    temperature=self.config["temperature"],
-                    max_tokens=self.config["max_tokens"]
-                )
-                yield response.choices[0].message.content
-        except Exception as e:
-            logger.error(f"❌ API Error: {e}")
-            yield "I'm experiencing technical difficulties. Please try again later."
+If you're in immediate danger, please contact:
+• Emergency Services: 911
+• National Suicide Prevention Lifeline: 988
+• Crisis Text Line: Text HOME to 741741
 
-    def _get_mock_response(self, agent: AgentType, message: str) -> str:
-        """Mock responses for testing without API"""
-        responses = {
-            AgentType.WELLNESS: "Daily 30-minute walks and a balanced diet are great for general wellness.",
-            AgentType.NUTRITION: "Focus on lean protein, complex carbs, and healthy fats.",
-            AgentType.INJURY: "Apply RICE (rest, ice, compress, elevate) and consult a doctor if pain persists.",
-            AgentType.ESCALATION: "Transferring you to a specialist. Please explain your concerns in detail."
-        }
-        return responses.get(agent, "How can I assist you with your health goals?")
+You are not alone. Professional help is available 24/7.
 
-    async def determine_next_agent(self, message: str, current: AgentType) -> AgentType:
-        """Determine next agent based on message"""
-        if self.client is None:
-            return self._mock_agent_decision(message)
-
-        prompt = f"""Analyze this message and choose the most suitable agent.
-Current Agent: {current.value}
-Message: {message}
-Options: {[a.value for a in AgentType]}
-Respond ONLY with the agent name."""
-
-        try:
-            response = await self.client.chat.completions.create(
-                model=self.config["model"],
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-                max_tokens=50
-            )
-            agent_name = response.choices[0].message.content.strip().lower()
-            return AgentType(agent_name) if agent_name in AgentType._value2member_map_ else current
-        except Exception as e:
-            logger.warning(f"Agent decision fallback: {e}")
-            return current
-
-    def _mock_agent_decision(self, message: str) -> AgentType:
-        """Simple rules for mock switching"""
-        msg = message.lower()
-        if any(word in msg for word in ["diet", "food", "meal"]):
+Would you like me to connect you with a human coach or provide additional mental health resources?
+        """
+        
+        # Log the emergency interaction
+        context.add_conversation(message, emergency_response, "emergency_system")
+        
+        return emergency_response.strip()
+    
+    def determine_agent(self, message: str, context: UserSessionContext) -> AgentType:
+        """Determine which agent should handle the message"""
+        message_lower = message.lower()
+        
+        # Nutrition-related keywords
+        nutrition_keywords = [
+            'meal', 'diet', 'food', 'nutrition', 'calories', 'recipe',
+            'eat', 'hungry', 'protein', 'carbs', 'fat', 'vitamin',
+            'supplement', 'weight loss', 'weight gain', 'vegetarian',
+            'vegan', 'keto', 'paleo', 'intermittent fasting'
+        ]
+        
+        # Fitness-related keywords
+        fitness_keywords = [
+            'workout', 'exercise', 'gym', 'fitness', 'training',
+            'muscle', 'strength', 'cardio', 'running', 'lifting',
+            'yoga', 'pilates', 'sports', 'physical activity',
+            'body building', 'endurance', 'flexibility'
+        ]
+        
+        # Mental health keywords
+        mental_health_keywords = [
+            'stress', 'anxiety', 'depression', 'sleep', 'mood',
+            'mental health', 'meditation', 'mindfulness', 'therapy',
+            'counseling', 'emotional', 'overwhelmed', 'tired',
+            'burnout', 'relaxation', 'breathing', 'panic'
+        ]
+        
+        # Human coach keywords
+        human_coach_keywords = [
+            'human', 'coach', 'person', 'talk to someone',
+            'professional', 'expert', 'counselor', 'therapist',
+            'doctor', 'nutritionist', 'trainer', 'specialist'
+        ]
+        
+        # Check for specific agent requests
+        if any(keyword in message_lower for keyword in human_coach_keywords):
+            return AgentType.HUMAN_COACH
+        elif any(keyword in message_lower for keyword in nutrition_keywords):
             return AgentType.NUTRITION
-        elif any(word in msg for word in ["pain", "injury", "recover"]):
-            return AgentType.INJURY
-        elif "talk to human" in msg:
-            return AgentType.ESCALATION
-        return AgentType.WELLNESS
-
+        elif any(keyword in message_lower for keyword in fitness_keywords):
+            return AgentType.FITNESS
+        elif any(keyword in message_lower for keyword in mental_health_keywords):
+            return AgentType.MENTAL_HEALTH
+        else:
+            return AgentType.WELLNESS
+    
     async def run_conversation(
         self,
         messages: List[str],
-        context: Optional[UserSessionContext] = None,
+        context: UserSessionContext,
         streaming: bool = False
     ) -> UserSessionContext:
-        """Run conversation and manage agent switching"""
-        ctx = context or UserSessionContext()
-        for msg in messages:
-            logger.info(f"User: {msg}")
-            ctx.add_message("user", msg)
-
-            response_text = ""
-            async for chunk in self.get_agent_response(ctx.current_agent, msg, ctx, streaming):
-                if streaming:
-                    print(chunk, end="", flush=True)
-                response_text += chunk
-
-            if streaming:
-                print()
-
-            ctx.add_message("assistant", response_text)
-            logger.info(f"{ctx.current_agent.value.capitalize()} Agent: {response_text}")
-
-            next_agent = await self.determine_next_agent(msg, ctx.current_agent)
-            if next_agent != ctx.current_agent:
-                ctx.log_handoff(ctx.current_agent, next_agent, f"User said: {msg}")
-                ctx.current_agent = next_agent
-
-        ctx.end_time = asyncio.get_event_loop().time()
-        return ctx
+        """Run a conversation with appropriate agent"""
+        
+        for message in messages:
+            # Determine the appropriate agent
+            target_agent = self.determine_agent(message, context)
+            
+            # Check if we need to hand off to a different agent
+            if target_agent != context.current_agent:
+                handoff_reason = f"User query requires {target_agent.value} expertise"
+                context.log_handoff(
+                    from_agent=context.current_agent.value,
+                    to_agent=target_agent.value,
+                    reason=handoff_reason
+                )
+                context.current_agent = target_agent
+            
+            # Get the appropriate agent
+            agent = self.agents[context.current_agent]
+            
+            # Process the message with the agent
+            try:
+                response = await agent.process_message(message, context)
+                
+                # Add to conversation history
+                context.add_conversation(message, response, context.current_agent.value)
+                
+                # Check if agent recommends handoff
+                handoff_recommendation = agent.should_handoff(message, context)
+                if handoff_recommendation:
+                    recommended_agent, reason = handoff_recommendation
+                    if recommended_agent != context.current_agent:
+                        context.log_handoff(
+                            from_agent=context.current_agent.value,
+                            to_agent=recommended_agent.value,
+                            reason=reason
+                        )
+                        context.current_agent = recommended_agent
+                
+            except Exception as e:
+                error_response = f"I apologize, but I encountered an error processing your request: {str(e)}"
+                context.add_conversation(message, error_response, "error")
+        
+        return context
+    
+    def get_agent_capabilities(self) -> Dict[str, List[str]]:
+        """Get capabilities of each agent"""
+        return {
+            agent_type.value: agent.get_capabilities()
+            for agent_type, agent in self.agents.items()
+        }
+    
+    def get_conversation_summary(self, context: UserSessionContext) -> str:
+        """Generate a summary of the conversation"""
+        if not context.conversation_history:
+            return "No conversations yet."
+        
+        total_conversations = len(context.conversation_history)
+        agents_used = set(entry['agent_type'] for entry in context.conversation_history)
+        handoffs = len(context.handoff_log)
+        
+        summary = f"""
+Conversation Summary:
+• Total messages: {total_conversations}
+• Agents consulted: {', '.join(agents_used)}
+• Agent handoffs: {handoffs}
+• Current focus: {context.goal_type.value}
+• Session duration: {(datetime.now() - context.session_start).total_seconds():.0f} seconds
+        """
+        
+        return summary.strip()

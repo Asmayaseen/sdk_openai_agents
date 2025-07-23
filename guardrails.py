@@ -1,207 +1,182 @@
-from pydantic import BaseModel,field_validator
-from typing import Optional, Dict, List, Union
+"""
+Input/Output Guardrails for Health & Wellness Planner Agent
+Validates user input and agent output for safety and appropriateness
+"""
 import re
-from enum import Enum
+import logging
+from typing import Dict, Any, List
+from datetime import datetime
+from pydantic import BaseModel, ValidationError
 
-class GoalMetrics(str, Enum):
-    WEIGHT_LOSS = "weight_loss"
-    WEIGHT_GAIN = "weight_gain"
-    MUSCLE_BUILDING = "muscle_building"
-    ENDURANCE = "endurance"
-    FLEXIBILITY = "flexibility"
-    GENERAL_FITNESS = "general_fitness"
+from context import GoalStructure, MealPlanStructure, WorkoutPlanStructure
 
-class DietaryPreferences(str, Enum):
-    VEGETARIAN = "vegetarian"
-    VEGAN = "vegan"
-    GLUTEN_FREE = "gluten_free"
-    DAIRY_FREE = "dairy_free"
-    KETO = "keto"
-    PALEO = "paleo"
-    OMNIVORE = "omnivore"
+logger = logging.getLogger(__name__)
 
-class InjuryType(str, Enum):
-    KNEE = "knee"
-    BACK = "back"
-    SHOULDER = "shoulder"
-    WRIST = "wrist"
-    ANKLE = "ankle"
-    NONE = "none"
+class HealthWellnessGuardrails:
+    def __init__(self):
+        self.dangerous_keywords = self._load_dangerous_keywords()
+        self.medical_emergency_keywords = self._load_medical_emergency_keywords()
+        self.inappropriate_content_patterns = self._load_inappropriate_patterns()
+        self.max_input_length = 2000
+        self.max_output_length = 5000
 
-class HealthCondition(str, Enum):
-    DIABETES = "diabetes"
-    HYPERTENSION = "hypertension"
-    CHOLESTEROL = "cholesterol"
-    NONE = "none"
-
-class StructuredGoal(BaseModel):
-    """Validated goal structure"""
-    goal_type: GoalMetrics
-    target_value: float
-    unit: str
-    timeframe_weeks: int
-    experience_level: str = "beginner"
-    
-    @field_validator('target_value')
-    def validate_target_value(cls, v):
-        if v <= 0:
-            raise ValueError("Target value must be positive")
-        if v > 1000:  # arbitrary large number
-            raise ValueError("Target value is unrealistically high")
-        return v
-    
-    @field_validator('timeframe_weeks')
-    def validate_timeframe(cls, v):
-        if v < 1:
-            raise ValueError("Timeframe must be at least 1 week")
-        if v > 52:
-            raise ValueError("Timeframe cannot exceed 1 year")
-        return v
-
-class InputGuardrails:
-    """Validates and sanitizes user input"""
-    
-    @staticmethod
-    def validate_goal_input(user_input: str) -> Optional[StructuredGoal]:
-        """Extracts and validates goal from natural language input"""
+    def validate_input(self, user_input: str) -> Dict[str, Any]:
+        logger.debug(f"Validating user input: {user_input}")
         try:
-            # Example pattern: "lose 5 kg in 2 months"
-            pattern = r"(lose|gain|build)\s+(\d+\.?\d*)\s*(kg|lb|pounds?|kilos?)\s*(?:in|within|over)\s*(\d+)\s*(weeks?|months?|years?)"
-            match = re.search(pattern, user_input.lower())
-            
-            if not match:
-                raise ValueError("Could not parse goal from input")
-            
-            action, value, unit, duration, time_unit = match.groups()
-            
-            # Convert to structured format
-            goal_map = {
-                "lose": GoalMetrics.WEIGHT_LOSS,
-                "gain": GoalMetrics.WEIGHT_GAIN,
-                "build": GoalMetrics.MUSCLE_BUILDING
-            }
-            
-            # Convert time to weeks
-            time_multiplier = 1
-            if time_unit.startswith("month"):
-                time_multiplier = 4
-            elif time_unit.startswith("year"):
-                time_multiplier = 52
-                
-            timeframe_weeks = int(duration) * time_multiplier
-            
-            # Standardize units
-            if unit in ["lb", "pound", "pounds"]:
-                unit = "lb"
-            else:
-                unit = "kg"
-            
-            return StructuredGoal(
-                goal_type=goal_map[action],
-                target_value=float(value),
-                unit=unit,
-                timeframe_weeks=timeframe_weeks
-            )
-            
+            if len(user_input.strip()) == 0:
+                return {'is_valid': False, 'error': 'Please provide a message.', 'category': 'empty_input'}
+
+            if len(user_input) > self.max_input_length:
+                return {'is_valid': False, 'error': f'Message too long. Keep under {self.max_input_length} characters.', 'category': 'length_exceeded'}
+
+            if (emergency := self._check_medical_emergency(user_input))['is_emergency']:
+                return {'is_valid': False, 'error': emergency['message'], 'category': 'medical_emergency'}
+
+            if (danger := self._check_dangerous_content(user_input))['is_safe'] is False:
+                return {'is_valid': False, 'error': danger['message'], 'category': 'dangerous_content'}
+
+            if (inappropriate := self._check_inappropriate_content(user_input))['is_appropriate'] is False:
+                return {'is_valid': False, 'error': inappropriate['message'], 'category': 'inappropriate_content'}
+
+            return {'is_valid': True, 'cleaned_input': user_input.strip(), 'category': 'valid'}
+
         except Exception as e:
-            raise ValueError(f"Invalid goal format: {str(e)}")
-    
-    @staticmethod
-    def validate_dietary_preference(input: str) -> DietaryPreferences:
-        """Validates dietary preference input"""
-        input = input.lower().strip()
-        for pref in DietaryPreferences:
-            if pref.value in input:
-                return pref
-        raise ValueError("Unsupported dietary preference")
-    
-    @staticmethod
-    def validate_injury_info(input: str) -> InjuryType:
-        """Validates injury information"""
-        input = input.lower().strip()
-        for injury in InjuryType:
-            if injury.value in input and injury != InjuryType.NONE:
-                return injury
-        return InjuryType.NONE
-    
-    @staticmethod
-    def validate_health_condition(input: str) -> HealthCondition:
-        """Validates health conditions"""
-        input = input.lower().strip()
-        for condition in HealthCondition:
-            if condition.value in input and condition != HealthCondition.NONE:
-                return condition
-        return HealthCondition.NONE
+            logger.exception("Exception during input validation")
+            return {'is_valid': False, 'error': 'Unable to process your message.', 'category': 'processing_error'}
 
-class OutputGuardrails:
-    """Validates and structures tool outputs"""
-    
-    @staticmethod
-    def validate_meal_plan_output(plan: Union[Dict, List]) -> Dict:
-        """Validates meal plan output structure"""
-        if isinstance(plan, list):
-            if len(plan) != 7:
-                raise ValueError("Meal plan must cover 7 days")
-            return {"days": plan}
-        
-        if not isinstance(plan, dict) or "days" not in plan:
-            raise ValueError("Meal plan must have 'days' key")
-        
-        if len(plan["days"]) != 7:
-            raise ValueError("Meal plan must cover 7 days")
-            
-        return plan
-    
-    @staticmethod
-    def validate_workout_plan_output(plan: Dict) -> Dict:
-        """Validates workout plan output structure"""
-        required_keys = {"days", "exercises", "duration_min", "intensity"}
-        if not all(key in plan for key in required_keys):
-            raise ValueError(f"Workout plan missing required keys: {required_keys}")
-        
-        if len(plan["days"]) not in [3, 4, 5, 7]:
-            raise ValueError("Workout plan must cover 3, 4, 5, or 7 days")
-            
-        return plan
-    
-    @staticmethod
-    def validate_progress_update(update: Dict) -> Dict:
-        """Validates progress tracking update"""
-        required_keys = {"metric", "value", "date", "notes"}
-        if not all(key in update for key in required_keys):
-            raise ValueError(f"Progress update missing required keys: {required_keys}")
-        return update
+    def validate_output(self, agent_output: Any, tool_name: str = None) -> Dict[str, Any]:
+        logger.debug(f"Validating output from tool '{tool_name}': {agent_output}")
+        try:
+            response_text = str(agent_output.get('response') if isinstance(agent_output, dict) else agent_output)
 
-class GuardrailError(Exception):
-    """Custom exception for guardrail violations"""
-    pass
+            if len(response_text) > self.max_output_length:
+                response_text = response_text[:self.max_output_length] + "... [Response truncated for safety]"
 
-def apply_input_guardrails(input: str, guardrail_type: str) -> Union[StructuredGoal, DietaryPreferences, InjuryType, HealthCondition]:
-    """Applies the appropriate input guardrail based on type"""
-    try:
-        if guardrail_type == "goal":
-            return InputGuardrails.validate_goal_input(input)
-        elif guardrail_type == "diet":
-            return InputGuardrails.validate_dietary_preference(input)
-        elif guardrail_type == "injury":
-            return InputGuardrails.validate_injury_info(input)
-        elif guardrail_type == "health":
-            return InputGuardrails.validate_health_condition(input)
-        else:
-            raise ValueError(f"Unknown guardrail type: {guardrail_type}")
-    except ValueError as e:
-        raise GuardrailError(str(e))
+            if (check := self._check_dangerous_medical_advice(response_text))['is_safe'] is False:
+                return {'is_valid': False, 'error': check['message'], 'category': 'dangerous_medical_advice'}
 
-def apply_output_guardrails(output: Union[Dict, List], output_type: str) -> Dict:
-    """Applies the appropriate output guardrail based on type"""
-    try:
-        if output_type == "meal_plan":
-            return OutputGuardrails.validate_meal_plan_output(output)
-        elif output_type == "workout_plan":
-            return OutputGuardrails.validate_workout_plan_output(output)
-        elif output_type == "progress_update":
-            return OutputGuardrails.validate_progress_update(output)
-        else:
-            raise ValueError(f"Unknown output guardrail type: {output_type}")
-    except ValueError as e:
-        raise GuardrailError(str(e))
+            processed_response = self._add_safety_disclaimers(response_text, tool_name)
+
+            if (tool_check := self._validate_tool_output(agent_output, tool_name))['is_valid'] is False:
+                return tool_check
+
+            return {'is_valid': True, 'data': processed_response, 'category': 'valid_output'}
+
+        except Exception as e:
+            logger.exception("Exception during output validation")
+            return {'is_valid': False, 'error': 'Unable to process response.', 'category': 'output_processing_error'}
+
+    def _check_medical_emergency(self, text: str) -> Dict[str, Any]:
+        text_lower = text.lower()
+        for keyword in self.medical_emergency_keywords:
+            if keyword in text_lower:
+                return {'is_emergency': True, 'message': '🚨 Possible medical emergency. Call emergency services (911/112).', 'keyword': keyword}
+        return {'is_emergency': False}
+
+    def _check_dangerous_content(self, text: str) -> Dict[str, Any]:
+        text_lower = text.lower()
+        for keyword in self.dangerous_keywords:
+            if keyword in text_lower:
+                return {'is_safe': False, 'message': 'Dangerous health practice detected. Consult a professional.', 'keyword': keyword}
+        return {'is_safe': True}
+
+    def _check_inappropriate_content(self, text: str) -> Dict[str, Any]:
+        for pattern in self.inappropriate_content_patterns:
+            if re.search(pattern, text, re.IGNORECASE):
+                return {'is_appropriate': False, 'message': 'Please keep the conversation appropriate.', 'pattern': pattern}
+        return {'is_appropriate': True}
+
+    def _check_dangerous_medical_advice(self, text: str) -> Dict[str, Any]:
+        patterns = [r'stop taking.*medication', r'ignore.*doctor', r'cure.*cancer', r'lose.*pounds.*week']
+        for pattern in patterns:
+            if re.search(pattern, text.lower()):
+                return {'is_safe': False, 'message': '⚠️ This may be dangerous advice. Consult a licensed doctor.', 'pattern': pattern}
+        return {'is_safe': True}
+
+    def _add_safety_disclaimers(self, response: str, tool_name: str = None) -> str:
+        disclaimers = {
+            'meal_planner': '\n\n⚠️ **Disclaimer**: Meal plan is for general guidance. Consult a dietitian.',
+            'workout_recommender': '\n\n⚠️ **Disclaimer**: Workout plan is for fitness guidance. Consult a doctor.',
+            'goal_analyzer': '\n\n⚠️ **Disclaimer**: Goals should be realistic. Get professional advice.',
+            'progress_tracker': '\n\n⚠️ **Disclaimer**: Progress tracking is informational only.',
+            'scheduler': '\n\n⚠️ **Disclaimer**: Use this schedule as a general guide.'
+        }
+        return response + (disclaimers.get(tool_name) or '\n\n⚠️ **Disclaimer**: Always consult a qualified medical professional.')
+
+    def _validate_tool_output(self, output: Any, tool_name: str = None) -> Dict[str, Any]:
+        validators = {
+            'meal_planner': self._validate_meal_plan_output,
+            'workout_recommender': self._validate_workout_output,
+            'goal_analyzer': self._validate_goal_output,
+            'progress_tracker': self._validate_progress_output,
+            'scheduler': self._validate_scheduler_output
+        }
+        try:
+            if tool_name in validators:
+                return validators[tool_name](output)
+            return {'is_valid': True}
+        except Exception as e:
+            logger.exception("Tool output validation failed")
+            return {'is_valid': False, 'error': str(e), 'category': 'tool_validation_error'}
+
+    def _validate_meal_plan_output(self, output: Any) -> Dict[str, Any]:
+        calories = output.get('nutrition_targets', {}).get('calories', 0)
+        if calories < 800 or calories > 4000:
+            return {'is_valid': False, 'error': 'Unrealistic calorie targets.', 'category': 'unrealistic_calories'}
+        return {'is_valid': True}
+
+    def _validate_workout_output(self, output: Any) -> Dict[str, Any]:
+        response = output.get('response', '').lower()
+        match = re.search(r'(\d+)\s*hours?', response)
+        if match and int(match.group(1)) > 3:
+            return {'is_valid': False, 'error': 'Workout duration too long.', 'category': 'excessive_workout'}
+        return {'is_valid': True}
+
+    def _validate_goal_output(self, output: Any) -> Dict[str, Any]:
+        goal = output.get('goal', {})
+        loss = goal.get('weight_loss_per_week')
+        if loss and loss > 1.0:
+            return {'is_valid': False, 'error': 'Unrealistic weight loss goal.', 'category': 'unrealistic_goal'}
+        return {'is_valid': True}
+
+    def _validate_progress_output(self, output: Any) -> Dict[str, Any]:
+        return {'is_valid': True}
+
+    def _validate_scheduler_output(self, output: Any) -> Dict[str, Any]:
+        return {'is_valid': True}
+
+    def _load_dangerous_keywords(self) -> List[str]:
+        return [
+            'extreme fasting', 'starvation diet', 'illegal steroids', 'diet pills',
+            'purging', 'laxative abuse', 'overtraining', 'push through injury',
+            'unsafe weight loss', 'dangerous detox'
+        ]
+
+    def _load_medical_emergency_keywords(self) -> List[str]:
+        return [
+            'chest pain', 'heart attack', 'stroke', "can't breathe", 'severe pain',
+            'unconscious', 'bleeding heavily', 'overdose', 'anaphylaxis',
+            'suicidal thoughts', 'want to die', 'emergency', 'ambulance'
+        ]
+
+    def _load_inappropriate_patterns(self) -> List[str]:
+        return [
+            r'\b(sex|porn|adult)\b', r'\b(drugs|cocaine|heroin)\b',
+            r'\b(violence|kill|murder)\b', r'\b(hate|racism)\b'
+        ]
+
+    def get_safety_guidelines(self) -> Dict[str, List[str]]:
+        return {
+            'general': [
+                'Consult healthcare professionals', 'Stay hydrated', 'Listen to your body'
+            ],
+            'exercise': [
+                'Warm up and cool down', 'Use proper form', 'Rest between sessions'
+            ],
+            'nutrition': [
+                'Eat balanced meals', 'Avoid extreme diets', 'Consult a dietitian'
+            ],
+            'goal_setting': [
+                'Set realistic goals', 'Track progress wisely', 'Celebrate small wins'
+            ]
+        }

@@ -27,7 +27,7 @@ def init_db():
             return False
 
         with conn.cursor() as cursor:
-            # Users
+            # USERS
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS users (
                     id SERIAL PRIMARY KEY,
@@ -50,7 +50,7 @@ def init_db():
                 )
             """)
 
-            # Goals
+            # GOALS
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS goals (
                     id SERIAL PRIMARY KEY,
@@ -67,7 +67,7 @@ def init_db():
                 )
             """)
 
-            # Conversations
+            # CONVERSATIONS
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS conversations (
                     id SERIAL PRIMARY KEY,
@@ -79,7 +79,7 @@ def init_db():
                 )
             """)
 
-            # Progress
+            # PROGRESS
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS progress (
                     id SERIAL PRIMARY KEY,
@@ -94,7 +94,7 @@ def init_db():
                 )
             """)
 
-            # Meal Plans
+            # MEAL PLANS
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS meal_plans (
                     id SERIAL PRIMARY KEY,
@@ -106,7 +106,7 @@ def init_db():
                 )
             """)
 
-            # Workouts
+            # WORKOUTS
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS workouts (
                     id SERIAL PRIMARY KEY,
@@ -118,7 +118,7 @@ def init_db():
                 )
             """)
 
-            # Indexes
+            # INDEXES
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_conversations_user_time ON conversations(user_id, timestamp DESC)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_goals_user_created ON goals(user_id, created_at DESC)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_progress_user_date ON progress(user_id, date DESC)")
@@ -132,8 +132,14 @@ def init_db():
         return False
 
     finally:
-        if conn:
+        if 'conn' in locals() and conn:
             conn.close()
+
+# -------------------- UTILITY FUNCTIONS --------------------
+
+def safe_close(conn):
+    if 'conn' in locals() and conn:
+        conn.close()
 
 # -------------------- CONVERSATIONS --------------------
 
@@ -155,8 +161,7 @@ def save_conversation(user_id, message, response, agent_type="health_coach"):
         st.error(f"❌ Error saving conversation: {e}")
         return False
     finally:
-        if conn:
-            conn.close()
+        safe_close(conn)
 
 def get_conversation_history(user_id, limit=50):
     try:
@@ -188,8 +193,7 @@ def get_conversation_history(user_id, limit=50):
         st.error(f"❌ Error fetching conversation history: {e}")
         return []
     finally:
-        if conn:
-            conn.close()
+        safe_close(conn)
 
 # -------------------- GOALS --------------------
 
@@ -219,8 +223,7 @@ def save_goal(user_id, goal_data):
         st.error(f"❌ Error saving goal: {e}")
         return False
     finally:
-        if conn:
-            conn.close()
+        safe_close(conn)
 
 def get_user_goals(user_id):
     try:
@@ -256,8 +259,7 @@ def get_user_goals(user_id):
         st.error(f"❌ Error fetching goals: {e}")
         return []
     finally:
-        if conn:
-            conn.close()
+        safe_close(conn)
 
 # -------------------- PROGRESS --------------------
 
@@ -287,8 +289,7 @@ def save_progress(user_id, progress_data):
         st.error(f"❌ Error saving progress: {e}")
         return False
     finally:
-        if conn:
-            conn.close()
+        safe_close(conn)
 
 def get_user_progress(user_id, days=30):
     try:
@@ -325,5 +326,4 @@ def get_user_progress(user_id, days=30):
         st.error(f"❌ Error fetching progress: {e}")
         return []
     finally:
-        if conn:
-            conn.close()
+        safe_close(conn)

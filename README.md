@@ -1,115 +1,64 @@
-📘 README.md — Health & Wellness Planner Agent
-🧠 Project: Health & Wellness Planner Agent
-AI-powered agent system to provide users with personalized 7-day meal plans, goal tracking, injury support, and wellness recommendations using OpenAI Agents SDK, Chainlit, and Streamlit.
+# 🏥 Health & Wellness Planner
 
-📁 Folder Structure
-arduino
-Copy
-Edit
-health_wellness_agent/
-├── main.py
-├── agent.py
-├── context.py
-├── hooks.py
-├── config.py
-├── chainlit_app.py
-├── utils/
-│   ├── streaming.py
-│   └── report.py
-├── tools/
-│   ├── goal_analyzer.py
-│   ├── meal_planner.py
-│   ├── workout_recommender.py
-│   ├── schedular.py
-│   └── tracker.py
-├── .env
-├── pyproject.toml
-└── README.md
-⚙️ Core Features
-✅ Personalized Meal Plan (7-day, dietary preference-based)
+A comprehensive multi-agent health and wellness planning system with AI-powered coaching, meal planning, workout recommendations, and progress tracking built with Python, OpenAI, and PostgreSQL.
 
-✅ Beginner-level Workout Plan
+## ✨ Features
 
-✅ Smart Goal Analysis
+### 🤖 Multi-Agent System
+- **Wellness Agent**: General health and wellness coaching
+- **Nutrition Agent**: Specialized meal planning and dietary advice
+- **Fitness Agent**: Personalized workout plans and exercise guidance
+- **Escalation Agent**: Human coach scheduling and support
 
-✅ Health Progress Tracker
+### 🎯 Core Functionality
+- **User Authentication & Profile Management**: Secure user accounts with comprehensive health profiles
+- **Goal Setting & Progress Tracking**: SMART goal creation with visual progress monitoring
+- **Meal Planning**: Personalized meal plans based on dietary preferences and restrictions
+- **Workout Recommendations**: Fitness plans adapted to user's activity level and goals
+- **Progress Monitoring**: Multi-metric tracking with data visualization
+- **Report Generation**: Comprehensive PDF and HTML health reports
+- **Database Persistence**: PostgreSQL backend for secure data storage
+- **API Endpoints**: RESTful API for external integrations
 
-✅ Injury Support Agent
+### 🖥️ Multiple Interfaces
+- **Streamlit Web App**: Interactive web interface for end users
+- **Command Line Interface**: Terminal-based interaction for power users
+- **FastAPI Backend**: RESTful API for integrations and mobile apps
+- **Chainlit Support**: Conversational AI interface (extensible)
 
-✅ Chainlit-based live chat interface
+## 🛠️ Tech Stack
 
-✅ PDF plan report export
+### Backend
+- **Python 3.11+** with asyncio for concurrent processing
+- **OpenAI API** for intelligent agent responses (GPT-4o)
+- **PostgreSQL** with psycopg2 for robust data persistence
+- **SQLAlchemy** for database ORM and migrations
+- **Pydantic** for data validation and serialization
+- **FastAPI** for REST API endpoints
 
-🚀 How to Run the Project
-📌 Python 3.12+ required
+### Frontend
+- **Streamlit** for main web interface
+- **Plotly** for interactive health data visualization
+- **ReportLab** for PDF report generation
+- **Bootstrap** CSS framework for responsive design
 
-1. Create Virtual Environment
-bash
-Copy
-Edit
-uv venv
-2. Activate Environment
-bash
-Copy
-Edit
-# Windows:
-.venv\Scripts\activate
+### Core Libraries
+- **OpenAI Agents** framework for multi-agent orchestration
+- **AsyncPG** for high-performance database connectivity
+- **Rich** for enhanced console output
+- **Pandas** for data analysis and manipulation
 
-# macOS/Linux:
-source .venv/bin/activate
-3. Add All Dependencies
-bash
-Copy
-Edit
-uv add chainlit fpdf nest-asyncio openai openai-agents pandas pydantic python-dotenv rich streamlit
-💬 Run as Chat App with Chainlit
-bash
-Copy
-Edit
-chainlit run chainlit_app.py
-🖥️ Run from CLI (Console)
-bash
-Copy
-Edit
-python main.py
-📄 .env File
-Create a .env file in the root:
+## 🚀 Quick Start
 
-env
-Copy
-Edit
-OPENAI_API_KEY=your_openai_api_key_here
-📦 Dependencies (Defined in pyproject.toml)
-chainlit>=2.6.0
+### Prerequisites
+- Python 3.11 or higher
+- PostgreSQL database
+- OpenAI API key
+- Git
 
-fpdf>=1.7.2
+### Installation
 
-nest-asyncio>=1.6.0
-
-openai>=1.93.0
-
-openai-agents>=0.1.0
-
-pandas>=2.3.0
-
-pydantic>=2.11.7
-
-python-dotenv>=1.1.1
-
-rich>=13.7.1
-
-streamlit>=1.46.1
-
-📊 PDF Wellness Report
-After generating your plan, a personalized .pdf report is created using the FPDF library in /utils/report.py.
-
-💡 Possible Future Additions
-Admin Dashboard (for coaches/trainers)
-
-Daily Email Reminders
-
-Supabase/SQLite integration for saving sessions
-
-👩‍💻 Created by
-Asma Yaseen — Governor Sindh GenAI Hackathon Participant
-🗓️ July 2025
+1. **Clone the repository**
+```bash
+git clone https://github.com/your-username/health-wellness-planner.git
+cd health-wellness-planner

@@ -1,4 +1,4 @@
-import os  # noqa: F401
+import os  
 import logging
 from enum import Enum
 from typing import Optional, Dict
@@ -7,6 +7,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from pydantic import Field, field_validator, ValidationInfo, Extra
 from pydantic_settings import BaseSettings
+from pydantic import BaseModel, Field, field_validator, ValidationInfo
 
 # Load environment variables from .env
 load_dotenv()
@@ -28,7 +29,8 @@ class LogLevel(str, Enum):
 # 🔹 Agent Configuration
 # ----------------------------
 
-class AgentConfig(BaseSettings):
+class AgentConfig(BaseModel):
+
     name: str
     system_prompt: str
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
@@ -40,16 +42,16 @@ class AgentConfig(BaseSettings):
 # 🔹 Application Configuration
 # ----------------------------
 
-class AppConfig(BaseSettings):
+class AppConfig(BaseModel):
     # App Info
     app_name: str = "Health & Wellness Planner"
     version: str = "1.0.0"
     description: str = "AI-powered health assistant with specialized agents"
 
     # API & Model Config
-    openai_api_key: Optional[str] = Field(None, env="OPENAI_API_KEY")
-    database_url: Optional[str] = Field(None, env="DATABASE_URL")
-    model_name: str = "gpt-4o"
+    gemini_api_key: Optional[str] = Field(default=None)
+    gemini_model: str = Field(default="gemini-2.0-flash")
+    database_url: Optional[str] = Field(default=None)
     api_timeout: int = 30
 
     # Agent Definitions
@@ -89,22 +91,19 @@ class AppConfig(BaseSettings):
     # Flags
     enable_streaming: bool = True
     enable_handoffs: bool = True
-    mock_mode: bool = Field(default=False, env="MOCK_MODE")
+    mock_mode: bool = Field(default=False)
 
     # Internal Config
     class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
-        extra = Extra.allow  # ✅ allow extra vars like CHAINLIT_DATA_LAYER etc.
+        extra = "allow"  
 
     # Validators
-    @field_validator("openai_api_key", mode="before")
+    @field_validator("gemini_api_key", mode="before")
     @classmethod
-    def validate_api_key(cls, v: Optional[str], info: ValidationInfo) -> Optional[str]:
+    def validate_gemini_key(cls, v: Optional[str], info: ValidationInfo) -> Optional[str]:
         mock_mode = info.data.get("mock_mode") if info.data else None
         if not mock_mode and not v:
-            raise ValueError("OPENAI_API_KEY is required when not in mock mode")
+            raise ValueError("GEMINI_API_KEY is required when not in mock mode")
         return v
 
     @field_validator("log_file")
@@ -122,7 +121,7 @@ class AppConfig(BaseSettings):
 def configure_logging(config: AppConfig):
     handlers = [logging.StreamHandler()]
     if config.log_file:
-        handlers.append(logging.FileHandler(config.log_file))
+        handlers.append(logging.FileHandler(str(config.log_file)))
 
     logging.basicConfig(
         level=config.log_level.value,
@@ -135,5 +134,10 @@ def configure_logging(config: AppConfig):
 # 🔹 Export config instance
 # ----------------------------
 
-app_config = AppConfig()
-config = app_config  # ✅ Can be used across app as `from config import config`
+# Initialize config with environment variables
+app_config = AppConfig(
+    gemini_api_key=os.getenv("GEMINI_API_KEY"),
+    database_url=os.getenv("DATABASE_URL"),
+    mock_mode=os.getenv("MOCK_MODE", "false").lower() == "true"
+)
+config = app_config

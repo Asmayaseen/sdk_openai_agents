@@ -1,137 +1,94 @@
+from typing import AsyncGenerator, Optional
 import logging
-from datetime import datetime
-from typing import Optional, Dict, Any
 
-from .base_agent import BaseAgent
-from openai import Assistant
-from ..context import UserSessionContext
-from ..tools.goal_analyzer import GoalAnalyzerTool
-from ..tools.meal_planner import MealPlannerTool
-from ..tools.workout_recommender import WorkoutRecommenderTool
+from agents.base import BaseAgent
 
 logger = logging.getLogger(__name__)
 
 class WellnessAgent(BaseAgent):
-    """
-    Main health and wellness planning agent that coordinates:
-    - Goal analysis
-    - Meal planning
-    - Workout recommendations
-    """
+    """Primary wellness coaching agent for general health guidance."""
     
     def __init__(self):
+        system_prompt = """You are a certified wellness coach and health advisor. You provide:
+
+1. General health and wellness guidance
+2. Lifestyle recommendations 
+3. Motivation and goal-setting support
+4. Holistic health approaches
+
+Key Guidelines:
+- Always prioritize user safety and recommend consulting healthcare professionals for medical issues
+- Provide evidence-based advice when possible
+- Be encouraging and supportive
+- Consider the user's complete health context
+- Make personalized recommendations based on their goals and preferences
+- If asked about specific nutrition or workout plans, suggest consulting the nutrition or fitness specialists
+
+Remember: You are not a medical doctor. Always recommend consulting healthcare professionals for medical concerns."""
+
         super().__init__(
-            name="WellnessAgent",
-            description="Primary agent for health and wellness planning",
-            tools=[
-                GoalAnalyzerTool(),
-                MealPlannerTool(),
-                WorkoutRecommenderTool()
-            ]
+            name="wellness",
+            description="Primary wellness coach for general health guidance and motivation",
+            system_prompt=system_prompt
         )
 
-    async def on_handoff(self, context: UserSessionContext) -> Optional[str]:
-        """
-        Determine if a handoff to a specialized agent is needed
+    async def process_message(self, message: str) -> AsyncGenerator[str, None]:
+        """Process wellness-related messages."""
+        logger.info(f"Wellness agent processing: {message[:50]}...")
         
-        Args:
-            context: Current user session context
-            
-        Returns:
-            str: Name of agent to handoff to, or None
-        """
-        if context.injury_notes:
-            return "InjurySupportAgent"
-        elif context.diet_preferences and any(
-            term in context.diet_preferences.lower() 
-            for term in ["diabet", "allerg", "celiac"]
-        ):
-            return "NutritionExpertAgent"
+        # Build context-aware prompt
+        contextual_message = self.build_context_prompt(message)
+        
+        # Stream response from OpenAI
+        async for chunk in self.get_openai_response(contextual_message):
+            yield chunk
+
+    async def should_handoff(self, message: str) -> Optional[str]:
+        """Determine if message should be handed off to specialist agent."""
+        message_lower = message.lower()
+        
+        # Check for nutrition-related keywords
+        nutrition_keywords = [
+            "meal plan", "diet", "nutrition", "calories", "food", "recipe",
+            "eat", "eating", "macros", "protein", "carbs", "fat"
+        ]
+        if any(keyword in message_lower for keyword in nutrition_keywords):
+            return "nutrition"
+        
+        # Check for fitness-related keywords
+        fitness_keywords = [
+            "workout", "exercise", "training", "gym", "fitness", "strength",
+            "cardio", "running", "lifting", "weights", "routine"
+        ]
+        if any(keyword in message_lower for keyword in fitness_keywords):
+            return "fitness"
+        
+        # Check for progress tracking keywords
+        progress_keywords = [
+            "track", "progress", "weight", "measurement", "record", "log",
+            "update", "metric", "goal progress"
+        ]
+        if any(keyword in message_lower for keyword in progress_keywords):
+            return "progress"
+        
         return None
 
-    @Assistant.tool
-    async def generate_wellness_plan(
-        self,
-        user_input: str,
-        context: Optional[UserSessionContext] = None
-    ) -> Dict[str, Any]:
-        """
-        Generate a comprehensive wellness plan based on user input
+    def get_welcome_message(self) -> str:
+        """Get personalized welcome message."""
+        if not self.context:
+            return "Hello! I'm your wellness coach. How can I help you today?"
         
-        Args:
-            user_input: User's health goals/requirements
-            context: Current session context
-            
-        Returns:
-            Dictionary containing:
-            - goal_analysis: Parsed health goals
-            - meal_plan: Generated meal suggestions
-            - workout_plan: Exercise recommendations
-            - timestamp: When plan was generated
-        """
-        try:
-            if not context:
-                context = UserSessionContext()
-            
-            # Step 1: Analyze goals
-            goal_result = await GoalAnalyzerTool().run(
-                {"goal_text": user_input},
-                context
-            )
-            if not goal_result or not goal_result.output:
-                raise ValueError("Goal analysis failed.")
-
-            # Step 2: Create meal plan
-            meal_result = await MealPlannerTool().run(
-                {
-                    "diet_preferences": context.diet_preferences or "",
-                    "calorie_target": self._calculate_calorie_target(goal_result.output)
-                },
-                context
-            )
-            if not meal_result or not meal_result.output:
-                raise ValueError("Meal planning failed.")
-
-            # Step 3: Generate workouts
-            workout_result = await WorkoutRecommenderTool().run(
-                {
-                    "fitness_level": context.fitness_level or "beginner",
-                    "goal_type": goal_result.output.get("goal_type", "general")
-                },
-                context
-            )
-            if not workout_result or not workout_result.output:
-                raise ValueError("Workout recommendation failed.")
-            
-            return {
-                "timestamp": datetime.now().isoformat(),
-                "goal_analysis": goal_result.output,
-                "meal_plan": meal_result.output,
-                "workout_plan": workout_result.output
-            }
-
-        except Exception as e:
-            logger.exception("Error generating wellness plan")
-            return {
-                "error": str(e),
-                "timestamp": datetime.now().isoformat()
-            }
-
-    def _calculate_calorie_target(self, goal_data: Dict[str, Any]) -> int:
-        """
-        Calculate daily calorie target based on goal type.
+        name = self.context.name
+        goal = self.context.goal_type.value.replace("_", " ").title() if self.context.goal_type else "general wellness"
         
-        Args:
-            goal_data: Dictionary containing goal information
-            
-        Returns:
-            int: Estimated daily calorie target
-        """
-        base_calories = 2000
-        goal_type = goal_data.get("goal_type", "maintain")
+        return f"""Hello {name}! 🌟 
 
-        if goal_type == "lose":
-            return base_calories - 300
-        elif goal_type == "gain":
-            return base_calories + 300
-        return base_calories
+I'm your personal wellness coach, here to support you on your {goal} journey. 
+
+I can help you with:
+• General health and wellness guidance
+• Lifestyle recommendations
+• Goal setting and motivation
+• Connecting you with our nutrition and fitness specialists
+
+What would you like to focus on today?"""

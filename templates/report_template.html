@@ -2,61 +2,427 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Wellness Report</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Health & Wellness Report</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             line-height: 1.6;
-            margin: 30px;
-            background-color: #fdfdfd;
+            margin: 0;
+            padding: 20px;
+            background-color: #f8f9fa;
             color: #333;
         }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
         .header {
             text-align: center;
+            margin-bottom: 40px;
+            border-bottom: 3px solid #2E86C1;
+            padding-bottom: 20px;
+        }
+        
+        .header h1 {
+            color: #2E86C1;
+            font-size: 2.5em;
+            margin: 0;
+            font-weight: 700;
+        }
+        
+        .header .subtitle {
+            color: #666;
+            font-size: 1.1em;
+            margin-top: 10px;
+        }
+        
+        .generated-info {
+            text-align: center;
+            color: #888;
+            font-size: 0.9em;
             margin-bottom: 30px;
         }
+        
         .section {
-            margin-bottom: 25px;
+            margin-bottom: 35px;
+            padding: 20px;
+            background-color: #fdfdfd;
+            border-left: 4px solid #2E86C1;
+            border-radius: 5px;
         }
+        
         .section h2 {
-            border-bottom: 2px solid #2e86c1;
-            padding-bottom: 5px;
-            color: #2e86c1;
+            color: #2E86C1;
+            font-size: 1.8em;
+            margin-top: 0;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
         }
-        .bmi {
+        
+        .section h2::before {
+            content: "▶";
+            margin-right: 10px;
+            font-size: 0.8em;
+        }
+        
+        .section h3 {
+            color: #34495e;
+            font-size: 1.3em;
+            margin-top: 25px;
+            margin-bottom: 15px;
+        }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .info-item {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 3px solid #3498db;
+        }
+        
+        .info-item strong {
+            color: #2c3e50;
+            display: block;
+            margin-bottom: 5px;
+        }
+        
+        .bmi-indicator {
             font-weight: bold;
-            color: #d35400;
+            padding: 5px 10px;
+            border-radius: 20px;
+            display: inline-block;
+            margin-top: 5px;
         }
-        ul {
+        
+        .bmi-normal { background-color: #d4edda; color: #155724; }
+        .bmi-underweight { background-color: #cce5ff; color: #004085; }
+        .bmi-overweight { background-color: #fff3cd; color: #856404; }
+        .bmi-obese { background-color: #f8d7da; color: #721c24; }
+        
+        .goal-item {
+            background-color: #f8f9fa;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #27ae60;
+        }
+        
+        .goal-title {
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 8px;
+        }
+        
+        .goal-progress {
+            background-color: #e9ecef;
+            border-radius: 10px;
+            height: 20px;
+            margin: 10px 0;
+            overflow: hidden;
+        }
+        
+        .goal-progress-bar {
+            background-color: #28a745;
+            height: 100%;
+            transition: width 0.3s ease;
+            border-radius: 10px;
+        }
+        
+        .goal-meta {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 5px;
+        }
+        
+        .progress-item {
+            background-color: #f8f9fa;
+            padding: 12px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            border-left: 3px solid #17a2b8;
+        }
+        
+        .progress-header {
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 5px;
+        }
+        
+        .progress-value {
+            font-size: 1.1em;
+            color: #007bff;
+            font-weight: bold;
+        }
+        
+        .progress-notes {
+            font-style: italic;
+            color: #666;
+            margin-top: 5px;
+        }
+        
+        .recommendations {
+            background-color: #e8f5e8;
+            padding: 20px;
+            border-radius: 5px;
+            border-left: 4px solid #28a745;
+        }
+        
+        .recommendations ul {
+            margin: 0;
             padding-left: 20px;
+        }
+        
+        .recommendations li {
+            margin-bottom: 8px;
+            color: #2c3e50;
+        }
+        
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 2px solid #e9ecef;
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .disclaimer {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+        
+        .disclaimer strong {
+            color: #856404;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            text-align: center;
+            border-top: 3px solid #2E86C1;
+        }
+        
+        .stat-value {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #2E86C1;
+        }
+        
+        .stat-label {
+            color: #666;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+        
+        @media (max-width: 600px) {
+            .info-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .container {
+                padding: 20px;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>Wellness Report for {{ user.name | default("Unknown User") }}</h1>
-        <p>Generated on {{ generated_at | default("N/A") }}</p>
+    <div class="container">
+        <div class="header">
+            <h1>🏥 Health & Wellness Report</h1>
+            <div class="subtitle">Comprehensive Health Assessment & Progress Tracking</div>
+        </div>
+        
+        <div class="generated-info">
+            Generated on {{ generated_at | default("N/A") }} for {{ user.name | default("Unknown User") }}
+        </div>
+        
+        <!-- Personal Information Section -->
+        <div class="section">
+            <h2>👤 Personal Information</h2>
+            <div class="info-grid">
+                <div class="info-item">
+                    <strong>Name:</strong>
+                    {{ user.name | default("Unknown") }}
+                </div>
+                <div class="info-item">
+                    <strong>Age:</strong>
+                    {{ user.age | default("N/A") }} years
+                </div>
+                <div class="info-item">
+                    <strong>Weight:</strong>
+                    {{ user.weight | default("N/A") }} kg
+                </div>
+                <div class="info-item">
+                    <strong>Height:</strong>
+                    {{ user.height | default("N/A") }} cm
+                </div>
+                <div class="info-item">
+                    <strong>Goal Type:</strong>
+                    {{ user.goal_type | default("General Wellness") }}
+                </div>
+                <div class="info-item">
+                    <strong>Activity Level:</strong>
+                    {{ user.activity_level | default("Moderate") }}
+                </div>
+            </div>
+            
+            {% if user.bmi %}
+            <div class="info-item">
+                <strong>BMI (Body Mass Index):</strong>
+                <span class="bmi-indicator {% if user.bmi < 18.5 %}bmi-underweight{% elif user.bmi < 25 %}bmi-normal{% elif user.bmi < 30 %}bmi-overweight{% else %}bmi-obese{% endif %}">
+                    {{ "%.1f" | format(user.bmi) }}
+                </span>
+            </div>
+            {% endif %}
+            
+            {% if user.dietary_preferences %}
+            <div class="info-item">
+                <strong>Dietary Preferences:</strong>
+                {{ user.dietary_preferences | join(", ") }}
+            </div>
+            {% endif %}
+        </div>
+        
+        <!-- Goals Section -->
+        <div class="section">
+            <h2>🎯 Current Goals</h2>
+            {% if goals %}
+                {% for goal in goals %}
+                <div class="goal-item">
+                    <div class="goal-title">{{ goal.title }}</div>
+                    <div>{{ goal.description }}</div>
+                    <div class="goal-progress">
+                        {% set progress_percent = ((goal.current_value / goal.target_value) * 100) if goal.target_value > 0 else 0 %}
+                        <div class="goal-progress-bar" style="width: {{ progress_percent }}%"></div>
+                    </div>
+                    <div class="goal-meta">
+                        <strong>Progress:</strong> {{ goal.current_value }}/{{ goal.target_value }} ({{ "%.1f" | format(progress_percent) }}%) |
+                        <strong>Category:</strong> {{ goal.category }} |
+                        <strong>Target Date:</strong> {{ goal.target_date }} |
+                        <strong>Status:</strong> {{ goal.status }}
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p>No goals currently set. Consider setting some health and wellness goals to track your progress!</p>
+            {% endif %}
+        </div>
+        
+        <!-- Progress Section -->
+        <div class="section">
+            <h2>📊 Recent Progress</h2>
+            {% if progress_data %}
+                {% set progress_by_category = {} %}
+                {% for item in progress_data %}
+                    {% if progress_by_category.update({item.category: progress_by_category.get(item.category, []) + [item]}) %}{% endif %}
+                {% endfor %}
+                
+                {% for category, items in progress_by_category.items() %}
+                <h3>{{ category }}</h3>
+                {% for item in items[:3] %}
+                <div class="progress-item">
+                    <div class="progress-header">{{ item.date }}</div>
+                    <div class="progress-value">{{ item.value }} {{ item.unit }}</div>
+                    {% if item.notes %}
+                    <div class="progress-notes">{{ item.notes }}</div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+                {% endfor %}
+            {% else %}
+                <p>No progress data available. Start tracking your health metrics to see your progress over time!</p>
+            {% endif %}
+        </div>
+        
+        <!-- Statistics Section -->
+        <div class="section">
+            <h2>📈 Summary Statistics</h2>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value">{{ goals | length }}</div>
+                    <div class="stat-label">Active Goals</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">{{ progress_data | length }}</div>
+                    <div class="stat-label">Progress Entries</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">{{ "%.1f" | format(user.bmi) if user.bmi else "N/A" }}</div>
+                    <div class="stat-label">Current BMI</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">
+                        {% if user.bmi %}
+                            {% if user.bmi < 18.5 %}Underweight
+                            {% elif user.bmi < 25 %}Normal
+                            {% elif user.bmi < 30 %}Overweight
+                            {% else %}Obese
+                            {% endif %}
+                        {% else %}N/A
+                        {% endif %}
+                    </div>
+                    <div class="stat-label">BMI Category</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Recommendations Section -->
+        <div class="section">
+            <h2>💡 Recommendations</h2>
+            <div class="recommendations">
+                <ul>
+                    <li>Continue tracking your daily progress across all health metrics</li>
+                    <li>Maintain consistent exercise routine based on your activity level</li>
+                    <li>Focus on balanced nutrition aligned with your dietary preferences</li>
+                    <li>Ensure adequate sleep (7-9 hours per night) for optimal recovery</li>
+                    <li>Stay hydrated throughout the day (aim for 8-10 glasses of water)</li>
+                    <li>Schedule regular health check-ups with your healthcare provider</li>
+                    <li>Consider working with a registered dietitian for personalized meal planning</li>
+                    <li>Set SMART goals (Specific, Measurable, Achievable, Relevant, Time-bound)</li>
+                    <li>Track your mood and energy levels to identify patterns</li>
+                    <li>Celebrate small victories and progress milestones</li>
+                </ul>
+            </div>
+        </div>
+        
+        <!-- Footer -->
+        <div class="footer">
+            <p><strong>Health & Wellness Planner</strong> - Your AI-powered health companion</p>
+            <p>Report generated by the Health & Wellness Planning System</p>
+            
+            <div class="disclaimer">
+                <strong>Important Disclaimer:</strong> This report is generated by an AI system and provides general wellness guidance based on the information you've provided. It is not intended to replace professional medical advice, diagnosis, or treatment. Always consult with qualified healthcare professionals for medical concerns and before making significant changes to your health regimen.
+            </div>
+        </div>
     </div>
-
-    <div class="section">
-        <h2>Personal Information</h2>
-        <p><strong>UID:</strong> {{ user.uid | default("N/A") }}</p>
-        <p><strong>Goal:</strong> {{ user.goal | default("Not specified") }}</p>
-        <p><strong>Diet Preferences:</strong> {{ user.diet_preferences | default("None") }}</p>
-        {% if bmi %}
-            <p><strong>BMI:</strong> <span class="bmi">{{ bmi }}</span></p>
-        {% endif %}
-    </div>
-
-    {% if user.meal_plan %}
-    <div class="section">
-        <h2>Meal Plan</h2>
-        <ul>
-            {% for meal in user.meal_plan %}
-                <li>{{ meal }}</li>
-            {% endfor %}
-        </ul>
-    </div>
-    {% endif %}
 </body>
 </html>

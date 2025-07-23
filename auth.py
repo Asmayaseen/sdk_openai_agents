@@ -56,6 +56,8 @@ def create_user(user_data):
         ))
         
         user_id = cursor.fetchone()[0]
+        result = cursor.fetchone()
+        user_id = result[0] if result else None
         
         conn.commit()
         cursor.close()

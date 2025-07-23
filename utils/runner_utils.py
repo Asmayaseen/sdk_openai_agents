@@ -1,7 +1,7 @@
 # utils/runner_utils.py
 
 from typing import AsyncGenerator, Optional, Union
-from openai.agents.runner import Runner, Step  
+from openai_agents.runner import Runner, Step  
 from ..agent import HealthWellnessAgent
 from ..context import UserSessionContext
 from datetime import datetime

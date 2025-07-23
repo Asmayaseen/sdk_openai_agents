@@ -6,10 +6,9 @@ import logging
 
 # Third-party Imports
 from pydantic import BaseModel, Field, field_validator
-from openai_agents import tool
 
 # Local Imports
-from ..context import UserSessionContext
+from context import UserSessionContext
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +90,6 @@ class ProgressTrackerTool:
     def output_schema(cls) -> type[BaseModel]:
         return cls.OutputModel
 
-    @tool
     async def execute(
         self,
         update: Dict[str, Union[str, float, datetime, None]],
@@ -149,22 +147,13 @@ class ProgressTrackerTool:
         """
         Updates the user's session context with the latest progress and history.
         """
-        # Initialize if not present
-        if not hasattr(context, "progress_history"):
-            context.progress_history = []
-        if not hasattr(context, "latest_metrics"):
-            context.latest_metrics = {}
-
-        # Add to progress history
-        context.progress_history.append(update.model_dump())
-
-        # Update latest metric snapshot
-        context.latest_metrics[update.metric] = {
-            "value": update.value,
-            "unit": update.unit,
-            "timestamp": update.timestamp.isoformat(),
-            "notes": update.notes
-        }
+        # Add to progress history using the context method
+        context.add_progress_update(
+            metric=update.metric,
+            value=update.value,
+            unit=update.unit,
+            notes=update.notes
+        )
 
         # Log the progress to context
         context.update_progress(
