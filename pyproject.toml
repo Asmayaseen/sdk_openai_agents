@@ -27,7 +27,7 @@ dependencies = [
     "pdfkit>=1.0.0",
     "plotly>=6.2.0",
     "plotly-express>=0.4.1",
-    "psycopg2>=2.9.10",
+    
     "psycopg2-binary==2.9.10",
     "pydantic>=2.11.7",
     "pytest>=8.4.1",
