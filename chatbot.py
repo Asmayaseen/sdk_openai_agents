@@ -1,23 +1,24 @@
 # chatbot.py
 
 import os
-from openai import OpenAI
+import google.generativeai as genai
 from dotenv import load_dotenv
 
-# .env file se API key load karo
+# Load environment variables from .env
 load_dotenv()
-api_key = os.getenv("OPENAI_API_KEY")
+api_key = os.getenv("GEMINI_API_KEY")
 
-# Client initialize karo
-client = OpenAI(api_key=api_key)
+if not api_key:
+    raise ValueError("GEMINI_API_KEY missing. Check your .env file.")
 
-# ChatGPT se baat karo
-response = client.chat.completions.create(
-    model="gpt-3.5-turbo",
-    messages=[
-        {"role": "user", "content": "Hello!"}
-    ]
-)
+# Configure Gemini
+genai.configure(api_key=api_key)
 
-# ChatGPT ka jawab print karo
-print(response.choices[0].message.content)
+# Choose the model (list available models if unsure)
+model = genai.GenerativeModel(model_name="gemini-1.5-flash")
+
+try:
+    response = model.generate_content("Hello!")
+    print(response.text)
+except Exception as e:
+    print("Gemini error:", e)

@@ -7,27 +7,25 @@ logger = logging.getLogger(__name__)
 
 class ProgressAgent(BaseAgent):
     """Specialized agent for progress tracking and analytics."""
-    
+
     def __init__(self):
-        system_prompt = """You are a health analytics specialist focused on progress tracking and goal monitoring. You provide:
-
-1. Progress analysis and insights
-2. Goal tracking and milestone recognition
-3. Data interpretation and trends
-4. Motivation based on achievements
-5. Recommendations for goal adjustments
-
-Key Guidelines:
-- Analyze user's progress data to provide meaningful insights
-- Celebrate achievements and milestones
-- Identify trends and patterns in the data
-- Provide constructive feedback on goal progress
-- Suggest adjustments when goals need to be modified
-- Be encouraging while being realistic about progress
-- Help users understand what their data means for their health journey
-
-Focus on helping users understand their progress and stay motivated toward their goals."""
-
+        system_prompt = (
+            "You are a health analytics specialist focused on progress tracking and goal monitoring. You provide:\n"
+            "1. Progress analysis and insights\n"
+            "2. Goal tracking and milestone recognition\n"
+            "3. Data interpretation and trends\n"
+            "4. Motivation based on achievements\n"
+            "5. Recommendations for goal adjustments\n\n"
+            "Key Guidelines:\n"
+            "- Analyze user's progress data to provide meaningful insights\n"
+            "- Celebrate achievements and milestones\n"
+            "- Identify trends and patterns in the data\n"
+            "- Provide constructive feedback on goal progress\n"
+            "- Suggest adjustments when goals need to be modified\n"
+            "- Be encouraging while being realistic about progress\n"
+            "- Help users understand what their data means for their health journey\n\n"
+            "Focus on helping users understand their progress and stay motivated toward their goals."
+        )
         super().__init__(
             name="progress",
             description="Specialized analyst for progress tracking and goal monitoring",
@@ -35,96 +33,110 @@ Focus on helping users understand their progress and stay motivated toward their
         )
 
     async def process_message(self, message: str) -> AsyncGenerator[str, None]:
-        """Process progress-related messages."""
+        """Process progress-related messages (Gemini streaming)."""
         logger.info(f"Progress agent processing: {message[:50]}...")
-        
-        # Build enhanced context for progress tracking
+
         contextual_message = self._build_progress_context(message)
-        
-        # Stream response from OpenAI
-        async for chunk in self.get_openai_response(contextual_message):
+
+        async for chunk in self.get_gemini_response(contextual_message):
             yield chunk
 
     def _build_progress_context(self, message: str) -> str:
-        """Build progress-specific context."""
+        """Build progress-specific user prompt for analysis."""
         base_context = self.build_context_prompt(message)
-        
-        if not self.context:
+        ctx = self.context
+
+        if not ctx:
             return base_context
-        
+
         progress_context = []
-        
+
         # Add recent progress entries
-        if self.context.progress_history:
-            recent_entries = self.context.progress_history[-5:]  # Last 5 entries
-            progress_summary = []
-            for entry in recent_entries:
-                progress_summary.append(f"{entry.date.strftime('%Y-%m-%d')}: {entry.metric} = {entry.value}{entry.unit}")
-            
+        if getattr(ctx, "progress_history", None):
+            recent_entries = ctx.progress_history[-5:]  # Last 5 entries
+            progress_summary = [
+                f"{entry.date.strftime('%Y-%m-%d')}: {entry.metric} = {entry.value}{entry.unit}"
+                for entry in recent_entries
+            ]
             progress_context.append("Recent Progress Entries:")
             progress_context.extend(progress_summary)
-        
+
         # Add latest metrics
-        if self.context.latest_metrics:
-            progress_context.append("\nCurrent Metrics:")
-            for metric, data in self.context.latest_metrics.items():
+        if getattr(ctx, "latest_metrics", None) and ctx.latest_metrics:
+            progress_context.append("Current Metrics:")
+            for metric, data in ctx.latest_metrics.items():
                 progress_context.append(f"{metric}: {data['value']}{data['unit']}")
-        
+
         # Add goal information
-        if self.context.goal_type and self.context.goal_target:
-            progress_context.append(f"\nCurrent Goal: {self.context.goal_type.value} - Target: {self.context.goal_target}{self.context.goal_unit.value}")
-        
+        if getattr(ctx, "goal_type", None) and getattr(ctx, "goal_target", None):
+            goal_unit = getattr(ctx.goal_unit, "value", str(ctx.goal_unit)) if getattr(ctx, "goal_unit", None) else ""
+            progress_context.append(f"Current Goal: {ctx.goal_type.value} - Target: {ctx.goal_target}{goal_unit}")
+
         if progress_context:
             additional_context = "\n".join(progress_context)
             return f"{base_context}\n\n[Progress Context]\n{additional_context}"
-        
+
         return base_context
 
     async def should_handoff(self, message: str) -> Optional[str]:
-        """Determine if message should be handed off to another agent."""
+        """
+        Determine if message should be handed off to another agent.
+        Returns the agent name string or None.
+        """
         message_lower = message.lower()
-        
-        # Check for nutrition planning
+
+        # Nutrition
         nutrition_keywords = [
             "meal plan", "diet plan", "nutrition advice", "food recommendations"
         ]
         if any(keyword in message_lower for keyword in nutrition_keywords):
             return "nutrition"
-        
-        # Check for workout planning
+
+        # Fitness
         fitness_keywords = [
             "workout plan", "exercise routine", "training program", "fitness plan"
         ]
         if any(keyword in message_lower for keyword in fitness_keywords):
             return "fitness"
-        
-        # Check for general wellness guidance
+
+        # Wellness/general
         wellness_keywords = [
             "general advice", "wellness tips", "health guidance", "lifestyle"
         ]
         if any(keyword in message_lower for keyword in wellness_keywords):
             return "wellness"
-        
+
         return None
 
     def generate_progress_summary(self) -> str:
-        """Generate a comprehensive progress summary."""
-        if not self.context:
+        """Generate a comprehensive progress summary from the agent context."""
+        ctx = self.context
+        if not ctx:
             return "No progress data available."
-        
+
         summary_parts = []
-        
+
         # Goal progress
-        if self.context.goal_type and self.context.goal_target:
-            summary_parts.append(f"Goal: {self.context.goal_type.value} - Target: {self.context.goal_target}{self.context.goal_unit.value}")
-        
-        # Recent progress
-        if self.context.progress_history:
-            latest_entry = self.context.progress_history[-1]
+        if getattr(ctx, "goal_type", None) and getattr(ctx, "goal_target", None):
+            goal_unit = getattr(ctx.goal_unit, "value", str(ctx.goal_unit)) if getattr(ctx, "goal_unit", None) else ""
+            summary_parts.append(f"Goal: {ctx.goal_type.value} - Target: {ctx.goal_target}{goal_unit}")
+
+        # Latest progress
+        if getattr(ctx, "progress_history", None) and ctx.progress_history:
+            latest_entry = ctx.progress_history[-1]
             summary_parts.append(f"Latest Update: {latest_entry.metric} = {latest_entry.value}{latest_entry.unit}")
-        
+
         # Total entries
-        total_entries = len(self.context.progress_history)
+        total_entries = len(ctx.progress_history) if getattr(ctx, "progress_history", None) else 0
         summary_parts.append(f"Total Progress Entries: {total_entries}")
-        
+
         return "\n".join(summary_parts) if summary_parts else "No progress data available."
+
+    def get_capabilities(self):
+        return [
+            "Progress analysis and insights",
+            "Goal tracking and milestone recognition",
+            "Data interpretation and trends",
+            "Motivation based on achievements",
+            "Recommendations for goal adjustments"
+        ]

@@ -4,8 +4,6 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 import pandas as pd
-
-
 from context import UserSessionContext
 
 def set_theme(theme: str):

@@ -3,24 +3,28 @@ from datetime import datetime
 
 def format_agent_response(response: Dict[str, Any]) -> str:
     """
-    Standardize agent response formatting with timestamp and error handling.
-    
+    Standardizes agent/tool responses with a timestamp. 
+    Handles errors and skips metadata fields.
+
     Args:
-        response: Raw agent response dictionary
-        
+        response (dict): Raw response from an agent/tool.
+
     Returns:
-        Formatted string representation of the response
+        str: Formatted string (timestamped), suitable for displaying in logs or UI.
     """
     try:
         timestamp = datetime.now().isoformat()
 
+        # Error display if present
+        if response is None:
+            return f"[ERROR {timestamp}] Empty response."
         if "error" in response:
             return f"[ERROR {timestamp}] {response['error']}"
 
         formatted = []
         for key in sorted(response.keys()):
             if key.lower() in {"timestamp", "internal", "context", "meta"}:
-                continue
+                continue  # Hide technical/meta
 
             value = response[key]
             if isinstance(value, list):
@@ -32,20 +36,18 @@ def format_agent_response(response: Dict[str, Any]) -> str:
                 formatted.append(f"{key}: {value}")
 
         return f"[{timestamp}] " + " | ".join(formatted)
-
     except Exception as e:
         return f"[{datetime.now().isoformat()}] Formatting error: {str(e)}"
 
-
 def validate_time_slot(slot: str) -> bool:
     """
-    Validate time slot formatting (HH:MM-HH:MM)
-    
+    Validates a time slot string in the format "HH:MM-HH:MM".
+
     Args:
-        slot: Time slot string to validate
-        
+        slot (str): Time range string.
+
     Returns:
-        bool: True if valid, False otherwise
+        bool: True if valid and start < end, else False.
     """
     try:
         if not isinstance(slot, str):
@@ -68,13 +70,12 @@ def validate_time_slot(slot: str) -> bool:
         if not is_valid_time(start_time_str) or not is_valid_time(end_time_str):
             return False
 
-        # Optional: Check if start < end
+        # Optionally: Ensure start < end
         start_dt = datetime.strptime(start_time_str, "%H:%M")
         end_dt = datetime.strptime(end_time_str, "%H:%M")
         if start_dt >= end_dt:
             return False
 
         return True
-
     except Exception:
         return False

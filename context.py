@@ -1,3 +1,4 @@
+# context.py
 from datetime import datetime, date
 from typing import Dict, List, Optional, Any, Literal
 from pydantic import BaseModel, Field
@@ -59,39 +60,47 @@ class HandoffLog(BaseModel):
 # ----------------- Main Context Model -----------------
 
 class UserSessionContext(BaseModel):
-    """Comprehensive user session context for health and wellness tracking."""
+    """
+    User session context for health and wellness agent.
+    """
 
-    # User Identity
-    user_id: str = Field(...)
+    # Assignment-required fields:
+    uid: Optional[int] = None   # For assignment compatibility
+    user_id: Optional[str] = None  # Prefer user_id, but both supported
     name: str = Field(...)
 
-    # Health Goals
+    # Health goals
+    goal: Optional[dict] = None  # Populate from GoalAnalyzerTool
     goal_type: GoalType = Field(default=GoalType.GENERAL_FITNESS)
     goal_target: Optional[float] = None
     goal_unit: GoalUnit = Field(default=GoalUnit.KG)
     goal_deadline: Optional[date] = None
 
-    # Personal Information
+    # Personal info
     age: Optional[int] = None
     weight: Optional[float] = None
     height: Optional[float] = None
     activity_level: Literal["sedentary", "light", "moderate", "active", "very_active"] = "moderate"
 
-    # Preferences
+    # Preferences and medical
     dietary_preference: DietaryPreference = Field(default=DietaryPreference.NO_PREFERENCE)
+    diet_preferences: Optional[str] = None  # For assignment compatibility (string description)
     food_allergies: List[str] = Field(default_factory=list)
     medical_conditions: List[MedicalCondition] = Field(default_factory=list)
     injury_notes: Optional[str] = None
 
-    # Current Plans
-    meal_plan: Dict[str, Any] = Field(default_factory=dict)
-    workout_plan: Dict[str, Any] = Field(default_factory=dict)
+    # Plans
+    meal_plan: Optional[List[str]] = None  # For assignment compatibility
+    meal_plan_struct: Dict[str, Any] = Field(default_factory=dict)   # For full daywise plan, if needed
+    workout_plan: Optional[Dict[str, Any]] = None
 
-    # Conversation and Progress
+    # Conversation and progress logs
     conversation_history: List[ConversationMessage] = Field(default_factory=list)
     progress_history: List[ProgressEntry] = Field(default_factory=list)
+    progress_logs: List[Dict[str, str]] = Field(default_factory=list)  # For assignment compatibility
     latest_metrics: Dict[str, Any] = Field(default_factory=dict)
-    handoff_logs: List[HandoffLog] = Field(default_factory=list)
+    handoff_logs: List[str] = Field(default_factory=list)  # Assignment-compatible (str/log)
+    handoff_struct_logs: List[HandoffLog] = Field(default_factory=list)
 
     # Session metadata
     current_agent: str = Field(default="wellness")
@@ -120,6 +129,7 @@ class UserSessionContext(BaseModel):
             notes=notes
         )
         self.progress_history.append(entry)
+        self.progress_logs.append({"metric": metric, "value": value, "unit": unit, "notes": notes or ""})
         self.latest_metrics[metric] = {
             "value": value,
             "unit": unit,
@@ -129,13 +139,14 @@ class UserSessionContext(BaseModel):
 
     def log_handoff(self, from_agent: str, to_agent: str, reason: str, context_snapshot: Optional[Dict[str, Any]] = None) -> None:
         """Log agent handoff."""
-        handoff = HandoffLog(
+        struct_log = HandoffLog(
             from_agent=from_agent,
             to_agent=to_agent,
             reason=reason,
             context_snapshot=context_snapshot or {}
         )
-        self.handoff_logs.append(handoff)
+        self.handoff_struct_logs.append(struct_log)
+        self.handoff_logs.append(f"{datetime.now().isoformat()}: {from_agent} -> {to_agent} ({reason})")
         self.current_agent = to_agent
 
     def get_recent_messages(self, count: int = 10) -> List[ConversationMessage]:
@@ -182,11 +193,13 @@ if __name__ == "__main__":
     print("🚀 Testing UserSessionContext...")
 
     context = UserSessionContext(
+        uid=1,
         user_id="asma001",
         name="Asma Yaseen",
         weight=60,
         height=165,
-        age=25
+        age=25,
+        diet_preferences="vegetarian"
     )
 
     print("✅ Context Created")

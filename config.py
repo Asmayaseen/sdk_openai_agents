@@ -10,7 +10,7 @@ class Config:
     def __init__(self):
         # Gemini Configuration
         self.GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
-        self.GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+        self.GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
 
         # Database Configuration
         self.DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///wellness.db")

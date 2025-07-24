@@ -1,251 +1,122 @@
-from typing import List
-from .base import BaseAgent
-from context import UserSessionContext
+from typing import AsyncGenerator, Optional
+import logging
+from agents.base import BaseAgent
 
-class EscalationAgent(BaseAgent):
-    """
-    Handles escalation to human professionals (medical, mental health, nutrition, and fitness).
-    """
+logger = logging.getLogger(__name__)
+
+class FitnessAgent(BaseAgent):
+    """Specialized fitness agent for workout planning and exercise guidance."""
 
     def __init__(self):
-        super().__init__(
-            name="EscalationAgent",
-            description="Handles referrals to human professionals",
-            system_prompt="You are a helpful escalation agent who refers users to real-world professionals such as doctors, nutritionists, therapists, and fitness experts."
+        system_prompt = (
+            "You are a certified personal trainer and exercise physiologist. You provide:\n"
+            "1. Personalized workout plans\n"
+            "2. Exercise form and technique guidance\n"
+            "3. Fitness program progression\n"
+            "4. Injury prevention strategies\n"
+            "5. Recovery and rest recommendations\n\n"
+            "Key Guidelines:\n"
+            "- Always prioritize safety and proper form\n"
+            "- Consider user's fitness level, injuries, and limitations\n"
+            "- Provide clear, step-by-step exercise instructions\n"
+            "- Include warm-up and cool-down recommendations\n"
+            "- Adapt exercises for different equipment availability\n"
+            "- Progress workouts gradually to prevent injury\n"
+            "- For serious injuries or health conditions, recommend consulting healthcare professionals\n\n"
+            "Focus on creating sustainable, effective fitness routines that match the user's goals and capabilities."
         )
-    async def process_message(self, message: str, context: UserSessionContext) -> str:
-        """Main entry point to route the message based on keywords"""
+        super().__init__(
+            name="fitness",
+            description="Specialized personal trainer for workout planning and exercise guidance",
+            system_prompt=system_prompt
+        )
+
+    async def process_message(self, message: str) -> AsyncGenerator[str, None]:
+        """
+        Processes fitness-related messages with user context awareness.
+        Streams response chunks for compatibility with Gemini/LLM UI.
+        """
+        logger.info(f"Fitness agent processing: {message[:50]}...")
+
+        # Build full context for Gemini prompt
+        contextual_message = self._build_fitness_context(message)
+
+        # Stream each Gemini chunk as it arrives
+        async for chunk in self.get_gemini_response(contextual_message):
+            yield chunk
+
+    def _build_fitness_context(self, message: str) -> str:
+        """
+        Adds fitness-specific user context to original message prompt.
+        """
+        base_context = self.build_context_prompt(message)
+
+        if not self.context:
+            return base_context
+
+        fitness_context = []
+
+        # Append key user health parameters, if set
+        if getattr(self.context, "activity_level", None):
+            fitness_context.append(f"Current Activity Level: {self.context.activity_level}")
+
+        if getattr(self.context, "injury_notes", None):
+            fitness_context.append(f"Injury Considerations: {self.context.injury_notes}")
+
+        if getattr(self.context, "workout_plan", None):
+            fitness_context.append("User has an existing workout plan")
+
+        if getattr(self.context, "goal_type", None):
+            goal_context = self._get_goal_specific_context()
+            if goal_context:
+                fitness_context.append(goal_context)
+
+        if fitness_context:
+            additional_context = "\n".join(fitness_context)
+            return f"{base_context}\n\n[Fitness Context]\n{additional_context}"
+
+        return base_context
+
+    def _get_goal_specific_context(self) -> str:
+        """
+        Returns detailed context guidance depending on user fitness goal.
+        """
+        if not self.context or not self.context.goal_type:
+            return ""
+
+        # Support Enum or string in goal_type
+        goal_type = getattr(self.context.goal_type, "value", str(self.context.goal_type))
+        goal_contexts = {
+            "weight_loss": "Focus on calorie-burning exercises and sustainable routines.",
+            "weight_gain": "Emphasize strength training and muscle-building exercises.",
+            "muscle_gain": "Prioritize progressive resistance training and recovery.",
+            "endurance": "Focus on cardiovascular fitness and stamina building.",
+            "general_fitness": "Provide balanced approach to strength, cardio, and flexibility.",
+            "rehabilitation": "Emphasize safe, therapeutic exercises for recovery."
+        }
+        return goal_contexts.get(goal_type, "")
+
+    async def should_handoff(self, message: str) -> Optional[str]:
+        """
+        Determines if user query should be handed off to nutrition agent or progress agent.
+        Returns the agent name, or None for self-handling.
+        """
         msg = message.lower()
 
-        if "medical" in msg:
-            return await self._handle_medical_escalation(message, context)
-        elif "nutrition" in msg or "diet" in msg:
-            return await self._handle_nutrition_escalation(message, context)
-        elif "fitness" in msg or "exercise" in msg:
-            return await self._handle_fitness_escalation(message, context)
-        else:
-            return await self._handle_general_escalation(message, context)
-
-
-    async def _handle_medical_escalation(self, message: str, context: UserSessionContext) -> str:
-        response = f"🏥 **Medical Professional Support**\n\n"
-        response += f"Hi {context.name}, seeking medical support is a smart step when it comes to your overall health. Here's a guide to help you navigate it:\n\n"
-
-        response += "🩺 **When to See a Doctor**:\n"
-        response += "• Chronic condition management\n"
-        response += "• Medication reviews and adjustments\n"
-        response += "• Health screenings and preventive care\n"
-        response += "• Referrals to specialists\n"
-        response += "• Medical clearance for exercise programs\n\n"
-
-        response += "🧑‍⚕️ **Specialists for Health & Fitness**:\n\n"
-
-        response += "**Endocrinologist**:\n"
-        response += "• Hormone-related weight issues\n"
-        response += "• Diabetes and metabolic disorders\n"
-        response += "• Thyroid conditions\n\n"
-
-        response += "**Sports Medicine Physician**:\n"
-        response += "• Exercise-related injuries\n"
-        response += "• Performance optimization\n"
-        response += "• Safe return to activity after injury\n\n"
-
-        response += "**Cardiologist**:\n"
-        response += "• Heart conditions affecting exercise\n"
-        response += "• Cardiovascular risk assessment\n"
-        response += "• Exercise stress testing\n\n"
-
-        response += "🔍 **How to Find Medical Professionals**:\n"
-        response += "• Insurance provider directory\n"
-        response += "• Hospital system websites\n"
-        response += "• State medical board directories\n"
-        response += "• Referrals from current doctors\n"
-        response += "• Healthgrades.com or similar rating sites\n\n"
-
-        response += "📋 **Preparing for Medical Appointments**:\n"
-        response += "• List current symptoms and when they started\n"
-        response += "• Bring current medications and supplements\n"
-        response += "• Prepare questions in advance\n"
-        response += "• Bring insurance cards and ID\n"
-        response += "• Consider bringing a support person\n\n"
-
-        response += "🚨 **Seek Immediate Medical Care For**:\n"
-        response += "• Chest pain or difficulty breathing\n"
-        response += "• Severe abdominal pain\n"
-        response += "• Signs of stroke (FAST: Face, Arms, Speech, Time)\n"
-        response += "• Severe allergic reactions\n"
-        response += "• High fever with concerning symptoms\n\n"
-
-        response += "Your health is the top priority. Don't hesitate to seek medical care when you have concerns! 🏥"
-        return response
-
-    async def _handle_nutrition_escalation(self, message: str, context: UserSessionContext) -> str:
-        response = f"🥗 **Nutrition Professional Support**\n\n"
-        response += f"Hi {context.name}, connecting with a nutrition professional is a great idea! Here's your guide:\n\n"
-
-        response += "👩‍⚕️ **Types of Nutrition Professionals**:\n\n"
-
-        response += "**Registered Dietitian Nutritionist (RDN)**:\n"
-        response += "• Nationally credentialed nutrition expert\n"
-        response += "• Completed accredited education and internship\n"
-        response += "• Can provide medical nutrition therapy\n"
-        response += "• Often covered by insurance\n"
-        response += "• Most reliable credential to look for\n\n"
-
-        response += "**Certified Nutrition Specialist (CNS)**:\n"
-        response += "• Advanced degree in nutrition\n"
-        response += "• Board certification in nutrition\n"
-        response += "• Focus on personalized nutrition approaches\n\n"
-
-        response += "🎯 **When to See a Nutrition Professional**:\n"
-        response += "• Weight management goals\n"
-        response += "• Medical conditions requiring dietary changes\n"
-        response += "• Food allergies or intolerances\n"
-        response += "• Eating disorders (with specialized training)\n"
-        response += "• Sports nutrition needs\n"
-        response += "• Digestive issues\n"
-        response += "• Pregnancy and breastfeeding nutrition\n\n"
-
-        response += "🔍 **How to Find a Qualified Professional**:\n"
-        response += "• Visit eatright.org (Academy of Nutrition and Dietetics)\n"
-        response += "• Use the 'Find an Expert' tool\n"
-        response += "• Search by location and specialty\n\n"
-
-        response += "**Insurance Coverage**:\n"
-        response += "• Many insurance plans cover RDN services\n"
-        response += "• May require physician referral\n"
-        response += "• Often covered for diabetes, kidney disease, etc.\n\n"
-
-        response += "**Other Options**:\n"
-        response += "• Hospital and medical center nutrition departments\n"
-        response += "• Your doctor’s referral\n"
-        response += "• Employee wellness programs\n\n"
-
-        response += "💰 **Cost Information**:\n"
-        response += "• Initial consultation: $100–200\n"
-        response += "• Follow-ups: $50–100\n"
-        response += "• Insurance may cover some or all\n"
-        response += "• Ask about sliding scale options\n\n"
-
-        response += "📋 **What to Expect**:\n"
-        response += "• Comprehensive nutrition assessment\n"
-        response += "• Personalized meal planning\n"
-        response += "• Ongoing education and monitoring\n"
-        response += "• Coordination with other healthcare providers\n\n"
-
-        response += "Working with a qualified nutrition professional can make a huge difference in reaching your health goals! 🌟"
-        return response
-
-    async def _handle_fitness_escalation(self, message: str, context: UserSessionContext) -> str:
-        response = f"🏋️‍♀️ **Fitness Professional Support**\n\n"
-        response += f"Hi {context.name}, working with a fitness professional is an excellent investment in your health!\n\n"
-
-        response += "💪 **Types of Fitness Professionals**:\n\n"
-
-        response += "**Certified Personal Trainer**:\n"
-        response += "• Custom workout plans and form correction\n"
-        response += "• Motivation and accountability\n"
-        response += "• Look for NASM, ACSM, ACE, NSCA certifications\n\n"
-
-        response += "**Exercise Physiologist**:\n"
-        response += "• Degree in exercise science\n"
-        response += "• Works with chronic disease patients\n"
-        response += "• Often in clinical rehab settings\n\n"
-
-        response += "**Physical Therapist**:\n"
-        response += "• Licensed healthcare professional\n"
-        response += "• Specializes in rehab and injury prevention\n"
-        response += "• Works with movement dysfunctions\n\n"
-
-        response += "🎯 **When to Work with a Fitness Pro**:\n"
-        response += "• New to exercise or post-injury\n"
-        response += "• Sports-specific training\n"
-        response += "• Plateaued progress\n"
-        response += "• Motivation or accountability needs\n"
-        response += "• Want proper form guidance\n\n"
-
-        response += "🔍 **How to Find One**:\n"
-        response += "• Local gyms, studios, recreation centers\n"
-        response += "• Directories on NASM.org, ACEfitness.org, ACSM.org, NSCA.com\n"
-        response += "• Online platforms like Thumbtack, ClassPass\n\n"
-
-        response += "💰 **Cost Guide**:\n"
-        response += "• Personal training: $30–100+ per session\n"
-        response += "• Group classes: $15–30\n"
-        response += "• Bundles reduce per-session rates\n"
-        response += "• Community centers = budget-friendly\n"
-        response += "• Some health plans cover it\n\n"
-
-        response += "❓ **Questions to Ask Trainers**:\n"
-        response += "• Certifications?\n"
-        response += "• Experience with your goals?\n"
-        response += "• Training style?\n"
-        response += "• Progress tracking?\n"
-        response += "• Rates and cancellation policy?\n"
-        response += "• Insurance coverage?\n\n"
-
-        response += "✅ **Tips for Success**:\n"
-        response += "• Get a consultation\n"
-        response += "• Match personality/style\n"
-        response += "• Ensure credentials and insurance\n\n"
-
-        response += "A great trainer can help you progress safely and effectively. 💪"
-        return response
-
-    async def _handle_general_escalation(self, message: str, context: UserSessionContext) -> str:
-        response = f"🤝 **Professional Support Options**\n\n"
-        response += f"Hi {context.name}, I understand you'd like to connect with human professionals. Here are your options:\n\n"
-
-        response += "👥 **Types of Professional Support**:\n\n"
-
-        response += "🧠 **Mental Health**:\n"
-        response += "• Therapists, counselors, psychologists\n"
-        response += "• Psychiatrists for medication\n"
-        response += "• Crisis counselors (immediate help)\n\n"
-
-        response += "🏥 **Medical**:\n"
-        response += "• Primary care doctors\n"
-        response += "• Specialists for conditions\n"
-        response += "• Preventive care\n\n"
-
-        response += "🥗 **Nutrition**:\n"
-        response += "• RDNs and CNS professionals\n"
-        response += "• Meal planning and medical nutrition therapy\n\n"
-
-        response += "🏋️‍♀️ **Fitness**:\n"
-        response += "• Certified personal trainers\n"
-        response += "• Exercise physiologists\n"
-        response += "• Physical therapists\n\n"
-
-        response += "🎯 **Why It Helps**:\n"
-        response += "• Personalized care\n"
-        response += "• Expertise and credentials\n"
-        response += "• Long-term support\n"
-        response += "• Integrates with medical care\n\n"
-
-        response += "🛠 **Getting Started**:\n"
-        response += "1. Identify your goal\n"
-        response += "2. Check insurance coverage\n"
-        response += "3. Ask for referrals\n"
-        response += "4. Check credentials\n"
-        response += "5. Schedule consultations\n\n"
-
-        response += "💡 **Remember**:\n"
-        response += "• It's okay to try more than one provider\n"
-        response += "• Seeking help is a sign of strength\n"
-        response += "• Professionals and AI can work together\n\n"
-
-        response += "Would you like more details about a specific kind of professional?"
-        return response
-
-    def get_capabilities(self) -> List[str]:
-        return [
-            "Crisis intervention and emergency resource provision",
-            "Mental health professional referrals",
-            "Medical professional guidance",
-            "Nutrition professional connections",
-            "Fitness professional recommendations",
-            "Insurance and cost guidance",
-            "Professional credential verification",
-            "Appointment preparation assistance"
+        nutrition_keywords = [
+            "meal plan", "diet", "nutrition", "food", "eating",
+            "calories", "protein", "supplements"
         ]
+        if any(keyword in msg for keyword in nutrition_keywords):
+            logger.info("FitnessAgent: handing off to nutrition agent for nutrition-related query.")
+            return "nutrition"
+
+        progress_keywords = [
+            "track progress", "log workout", "record reps",
+            "update measurements", "progress tracking"
+        ]
+        if any(keyword in msg for keyword in progress_keywords):
+            logger.info("FitnessAgent: handing off to progress agent for progress-tracking query.")
+            return "progress"
+
+        return None

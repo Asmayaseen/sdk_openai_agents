@@ -50,7 +50,7 @@ class AppConfig(BaseModel):
 
     # API & Model Config
     gemini_api_key: Optional[str] = Field(default=None)
-    gemini_model: str = Field(default="gemini-2.0-flash")
+    gemini_model: str = Field(default="gemini-1.5-flash")
     database_url: Optional[str] = Field(default=None)
     api_timeout: int = 30
 

@@ -1,39 +1,37 @@
-import streamlit as st
 import psycopg2
 import os
 import json
 from datetime import datetime, timedelta
 
 # -------------------- DATABASE CONNECTION --------------------
-
 def get_db_connection():
     try:
         database_url = os.getenv("DATABASE_URL")
         if not database_url:
-            st.error("⚠️ DATABASE_URL not set in environment variables.")
+            print("⚠️ DATABASE_URL not set in environment variables.")
             return None
         return psycopg2.connect(database_url)
     except Exception as e:
-        st.error(f"❌ Database connection error: {e}")
+        print(f"❌ Database connection error: {e}")
         return None
 
 # -------------------- DATABASE INIT --------------------
-
 def init_db():
     """Creates required PostgreSQL tables if not exist."""
+    conn = None
     try:
         conn = get_db_connection()
         if conn is None:
             return False
 
         with conn.cursor() as cursor:
-            # USERS
+            # USERS TABLE
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS users (
                     id SERIAL PRIMARY KEY,
-                    username VARCHAR(50) UNIQUE NOT NULL,
+                    username VARCHAR(50) UNIQUE,
                     email VARCHAR(100) UNIQUE,
-                    password_hash VARCHAR(255) NOT NULL,
+                    password_hash VARCHAR(255),
                     age INTEGER,
                     gender VARCHAR(10),
                     height FLOAT,
@@ -49,8 +47,7 @@ def init_db():
                     last_login TIMESTAMP
                 )
             """)
-
-            # GOALS
+            # GOALS TABLE
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS goals (
                     id SERIAL PRIMARY KEY,
@@ -66,20 +63,18 @@ def init_db():
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-
-            # CONVERSATIONS
+            # CONVERSATIONS TABLE
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS conversations (
                     id SERIAL PRIMARY KEY,
-                    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                    user_id VARCHAR(100),
                     message TEXT NOT NULL,
                     response TEXT NOT NULL,
                     agent_type VARCHAR(50) DEFAULT 'health_coach',
                     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-
-            # PROGRESS
+            # PROGRESS TABLE
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS progress (
                     id SERIAL PRIMARY KEY,
@@ -93,8 +88,7 @@ def init_db():
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-
-            # MEAL PLANS
+            # MEAL PLANS TABLE
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS meal_plans (
                     id SERIAL PRIMARY KEY,
@@ -105,8 +99,7 @@ def init_db():
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-
-            # WORKOUTS
+            # WORKOUTS TABLE
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS workouts (
                     id SERIAL PRIMARY KEY,
@@ -117,38 +110,33 @@ def init_db():
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-
             # INDEXES
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_conversations_user_time ON conversations(user_id, timestamp DESC)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_goals_user_created ON goals(user_id, created_at DESC)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_progress_user_date ON progress(user_id, date DESC)")
-
         conn.commit()
-        st.success("✅ Database initialized successfully.")
+        print("✅ Database initialized successfully.")
         return True
-
     except Exception as e:
-        st.error(f"❌ Database initialization error: {e}")
+        print(f"❌ Database initialization error: {e}")
         return False
-
     finally:
-        if 'conn' in locals() and conn:
+        if conn:
             conn.close()
 
-# -------------------- UTILITY FUNCTIONS --------------------
-
+# -------------------- UTILITY CLOSE --------------------
 def safe_close(conn):
-    if 'conn' in locals() and conn:
+    if conn:
         conn.close()
 
 # -------------------- CONVERSATIONS --------------------
-
 def save_conversation(user_id, message, response, agent_type="health_coach"):
+    """Save a conversation step to the database (user/agent Q-A pair)."""
+    conn = None
     try:
         conn = get_db_connection()
         if conn is None:
             return False
-
         with conn.cursor() as cursor:
             cursor.execute("""
                 INSERT INTO conversations (user_id, message, response, agent_type, timestamp)
@@ -156,19 +144,18 @@ def save_conversation(user_id, message, response, agent_type="health_coach"):
             """, (user_id, message, response, agent_type, datetime.now()))
             conn.commit()
         return True
-
     except Exception as e:
-        st.error(f"❌ Error saving conversation: {e}")
+        print(f"❌ Error saving conversation: {e}")
         return False
     finally:
         safe_close(conn)
 
 def get_conversation_history(user_id, limit=50):
+    conn = None
     try:
         conn = get_db_connection()
         if conn is None:
             return []
-
         with conn.cursor() as cursor:
             cursor.execute("""
                 SELECT message, response, agent_type, timestamp 
@@ -178,7 +165,6 @@ def get_conversation_history(user_id, limit=50):
                 LIMIT %s
             """, (user_id, limit))
             rows = cursor.fetchall()
-
         return [
             {
                 'message': row[0],
@@ -188,21 +174,19 @@ def get_conversation_history(user_id, limit=50):
             }
             for row in rows
         ]
-
     except Exception as e:
-        st.error(f"❌ Error fetching conversation history: {e}")
+        print(f"❌ Error fetching conversation history: {e}")
         return []
     finally:
         safe_close(conn)
 
 # -------------------- GOALS --------------------
-
 def save_goal(user_id, goal_data):
+    conn = None
     try:
         conn = get_db_connection()
         if conn is None:
             return False
-
         with conn.cursor() as cursor:
             cursor.execute("""
                 INSERT INTO goals (user_id, title, description, category, target_value, target_date, status)
@@ -218,19 +202,18 @@ def save_goal(user_id, goal_data):
             ))
             conn.commit()
         return True
-
     except Exception as e:
-        st.error(f"❌ Error saving goal: {e}")
+        print(f"❌ Error saving goal: {e}")
         return False
     finally:
         safe_close(conn)
 
 def get_user_goals(user_id):
+    conn = None
     try:
         conn = get_db_connection()
         if conn is None:
             return []
-
         with conn.cursor() as cursor:
             cursor.execute("""
                 SELECT id, title, description, category, target_value, current_value, target_date, status, created_at
@@ -239,7 +222,6 @@ def get_user_goals(user_id):
                 ORDER BY created_at DESC
             """, (user_id,))
             rows = cursor.fetchall()
-
         return [
             {
                 'id': row[0],
@@ -254,21 +236,19 @@ def get_user_goals(user_id):
             }
             for row in rows
         ]
-
     except Exception as e:
-        st.error(f"❌ Error fetching goals: {e}")
+        print(f"❌ Error fetching goals: {e}")
         return []
     finally:
         safe_close(conn)
 
 # -------------------- PROGRESS --------------------
-
 def save_progress(user_id, progress_data):
+    conn = None
     try:
         conn = get_db_connection()
         if conn is None:
             return False
-
         with conn.cursor() as cursor:
             cursor.execute("""
                 INSERT INTO progress (user_id, category, value, unit, notes, data, date)
@@ -284,21 +264,19 @@ def save_progress(user_id, progress_data):
             ))
             conn.commit()
         return True
-
     except Exception as e:
-        st.error(f"❌ Error saving progress: {e}")
+        print(f"❌ Error saving progress: {e}")
         return False
     finally:
         safe_close(conn)
 
 def get_user_progress(user_id, days=30):
+    conn = None
     try:
         conn = get_db_connection()
         if conn is None:
             return []
-
         start_date = datetime.now() - timedelta(days=days)
-
         with conn.cursor() as cursor:
             cursor.execute("""
                 SELECT id, category, value, unit, notes, data, date, created_at
@@ -307,7 +285,6 @@ def get_user_progress(user_id, days=30):
                 ORDER BY date DESC
             """, (user_id, start_date.date()))
             rows = cursor.fetchall()
-
         return [
             {
                 'id': row[0],
@@ -321,9 +298,8 @@ def get_user_progress(user_id, days=30):
             }
             for row in rows
         ]
-
     except Exception as e:
-        st.error(f"❌ Error fetching progress: {e}")
+        print(f"❌ Error fetching progress: {e}")
         return []
     finally:
         safe_close(conn)
