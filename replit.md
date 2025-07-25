@@ -85,7 +85,7 @@ The `UserSessionContext` class maintains comprehensive user state including:
 - **PostgreSQL**: Production database (SQLite for development)
 
 ### Environment Variables:
-- `OPENAI_API_KEY`: Required for AI functionality
+- `GEMINI_API_KEY`: Required for AI functionality
 - `DATABASE_URL`: Database connection string (defaults to SQLite)
 - `DEBUG`: Enable debug logging
 

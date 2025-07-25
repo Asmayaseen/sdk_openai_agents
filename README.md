@@ -53,7 +53,7 @@ A comprehensive multi-agent health and wellness planning system with AI-powered 
 ### Prerequisites
 - Python 3.11 or higher
 - PostgreSQL database
-- OpenAI API key
+- Gemini API key
 - Git
 
 ### Installation
